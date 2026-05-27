@@ -38,7 +38,6 @@ canvas{display:block;position:absolute;top:0;left:0}
 .stat-bar{display:flex;gap:2px;margin-top:4px}
 .stat-pip{width:10px;height:6px;background:#1a2a3a;border-radius:1px}
 .stat-pip.on{background:#0ff}
-.stat-pip.on.red{background:#f04}
 .diff-btn{padding:8px 20px;border:1px solid #0af;color:#0af;background:transparent;cursor:pointer;border-radius:2px;font-size:12px;letter-spacing:2px;text-transform:uppercase;transition:all .2s}
 .diff-btn:hover,.diff-btn.active{background:#0af;color:#000}
 .section-title{font-size:12px;letter-spacing:3px;color:#0af;margin:16px 0 8px;text-transform:uppercase}
@@ -61,6 +60,28 @@ canvas{display:block;position:absolute;top:0;left:0}
 .instructions-box li{list-style:none;padding-left:12px}
 .instructions-box li::before{content:"▸ ";color:#0af}
 #arena-label{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:3px;color:#0af4;pointer-events:none}
+/* TAIL REMOVAL HUD */
+#tr-hud{position:absolute;top:12px;left:0;width:100%;display:flex;justify-content:space-between;padding:0 20px;pointer-events:none}
+.tr-box{display:flex;flex-direction:column;align-items:center;min-width:140px}
+.tr-label{font-size:11px;letter-spacing:2px;margin-bottom:4px}
+.tr-label.p1{color:#0ff}
+.tr-label.p2{color:#f0a}
+.tr-len{font-size:28px;font-weight:900;line-height:1}
+.tr-len.p1{color:#0ff;text-shadow:0 0 12px #0ff}
+.tr-len.p2{color:#f0a;text-shadow:0 0 12px #f0a}
+.tr-segs{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;max-width:160px;justify-content:center}
+.tr-seg{width:10px;height:10px;border-radius:2px}
+.tr-seg.p1{background:#0ff;box-shadow:0 0 4px #0ff}
+.tr-seg.p2{background:#f0a;box-shadow:0 0 4px #f0a}
+/* food timer ring */
+#food-timer-wrap{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none}
+.food-timer-ring{width:44px;height:44px;position:relative}
+.food-timer-ring svg{transform:rotate(-90deg)}
+.food-timer-label{font-size:11px;letter-spacing:2px;color:#0af}
+/* mode badge */
+.mode-badge{display:inline-block;padding:3px 10px;border-radius:2px;font-size:10px;letter-spacing:2px;margin-bottom:6px}
+.mode-badge.mode1{background:#0af2;border:1px solid #0af;color:#0ff}
+.mode-badge.mode2{background:#f042;border:1px solid #f04;color:#f0a}
 </style></head>
 <body>
 <canvas id="bg"></canvas>
@@ -82,16 +103,45 @@ canvas{display:block;position:absolute;top:0;left:0}
   <div id="screen-modes" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">SELECT MODE</div>
     <div class="menu-group">
-      <button class="btn" onclick="showScreen('screen-snake-select'); setupMode('bot')">🤖 VS BOT</button>
-      <button class="btn" onclick="showScreen('screen-snake-select'); setupMode('local')">👥 LOCAL 2P</button>
+      <button class="btn" onclick="showScreen('screen-tr-select')">✂️ TAIL REMOVAL <span style="font-size:10px;opacity:.6">MODE 1</span></button>
+      <button class="btn" onclick="showScreen('screen-snake-select'); setupMode('bot')">🤖 PREDATOR <span style="font-size:10px;opacity:.6">MODE 2 · VS BOT</span></button>
+      <button class="btn" onclick="showScreen('screen-snake-select'); setupMode('local')">👥 PREDATOR <span style="font-size:10px;opacity:.6">MODE 2 · LOCAL 2P</span></button>
       <button class="btn" onclick="showScreen('screen-matchmaking'); startMatchmaking()">🌐 ONLINE</button>
       <button class="btn btn-red" onclick="showScreen('screen-menu')">← BACK</button>
     </div>
   </div>
 
-  <!-- SNAKE SELECT -->
+  <!-- TAIL REMOVAL SELECT -->
+  <div id="screen-tr-select" class="screen hidden">
+    <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">TAIL REMOVAL</div>
+    <div class="mode-badge mode1">MODE 1 · BOT ONLY</div>
+    <div class="section-title">Choose your serpent</div>
+    <div class="mode-row">
+      <div class="snake-card" id="tr-card-small" onclick="trSelectSnake('small')">
+        <h3>⚡ SPECTER</h3>
+        <div style="font-size:11px;color:#0af;margin-top:6px">Cyan · Agile</div>
+      </div>
+      <div class="snake-card" id="tr-card-big" onclick="trSelectSnake('big')">
+        <h3>💥 LEVIATHAN</h3>
+        <div style="font-size:11px;color:#0af;margin-top:6px">Pink · Resilient</div>
+      </div>
+    </div>
+    <div class="section-title">BOT DIFFICULTY</div>
+    <div class="mode-row">
+      <button class="diff-btn active" id="tr-diff-easy" onclick="trSetDiff('easy',this)">EASY</button>
+      <button class="diff-btn" id="tr-diff-medium" onclick="trSetDiff('medium',this)">MEDIUM</button>
+      <button class="diff-btn" id="tr-diff-hard" onclick="trSetDiff('hard',this)">HARD</button>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px">
+      <button class="btn btn-green hidden" id="tr-btn-start" onclick="startTailRemoval()">▶ FIGHT!</button>
+      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
+    </div>
+  </div>
+
+  <!-- PREDATOR SNAKE SELECT -->
   <div id="screen-snake-select" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">CHOOSE YOUR SERPENT</div>
+    <div class="mode-badge mode2">MODE 2 · PREDATOR</div>
     <div class="section-title" id="select-instruction">Player 1: Pick your snake</div>
     <div class="mode-row">
       <div class="snake-card" id="card-small" onclick="selectSnake('small')">
@@ -131,7 +181,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div style="margin-top:24px"><button class="btn btn-red" onclick="cancelMatchmaking()">CANCEL</button></div>
   </div>
 
-  <!-- GAME HUD -->
+  <!-- PREDATOR GAME HUD -->
   <div id="screen-game" class="screen hidden" style="pointer-events:none">
     <div class="hbar-wrap" style="pointer-events:none">
       <div class="hbar-box">
@@ -139,7 +189,7 @@ canvas{display:block;position:absolute;top:0;left:0}
         <div class="hbar-bg"><div class="hbar-fill p1" id="hp-bar-specter" style="width:100%"></div></div>
         <div class="hbar-hp p1" id="hp-text-specter">15</div>
       </div>
-      <div id="arena-label">◉ ARENA</div>
+      <div id="arena-label">◉ PREDATOR ARENA</div>
       <div class="hbar-box" style="align-items:flex-end">
         <div class="hbar-label p2" id="leviathan-name">💥 LEVIATHAN</div>
         <div class="hbar-bg"><div class="hbar-fill p2" id="hp-bar-leviathan" style="width:100%"></div></div>
@@ -154,13 +204,47 @@ canvas{display:block;position:absolute;top:0;left:0}
     </div>
   </div>
 
+  <!-- TAIL REMOVAL GAME HUD -->
+  <div id="screen-tr-game" class="screen hidden" style="pointer-events:none">
+    <div id="tr-hud">
+      <div class="tr-box">
+        <div class="tr-label p1" id="tr-p1-name">⚡ SPECTER</div>
+        <div class="tr-len p1" id="tr-p1-len">20</div>
+        <div class="tr-segs" id="tr-p1-segs"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center">
+        <div style="font-size:10px;letter-spacing:3px;color:#0af4">✂️ TAIL REMOVAL</div>
+        <div style="font-size:10px;color:#0af;margin-top:2px" id="tr-round-label">ROUND 1</div>
+      </div>
+      <div class="tr-box" style="align-items:flex-end">
+        <div class="tr-label p2" id="tr-p2-name">🤖 BOT</div>
+        <div class="tr-len p2" id="tr-p2-len">20</div>
+        <div class="tr-segs" id="tr-p2-segs"></div>
+      </div>
+    </div>
+    <!-- Food timer display -->
+    <div id="food-timer-wrap">
+      <div class="food-timer-ring" id="food-timer-ring">
+        <svg width="44" height="44" viewBox="0 0 44 44">
+          <circle cx="22" cy="22" r="18" fill="none" stroke="#0af2" stroke-width="3"/>
+          <circle id="food-timer-arc" cx="22" cy="22" r="18" fill="none" stroke="#0ff" stroke-width="3"
+            stroke-dasharray="113" stroke-dashoffset="0" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="food-timer-label" id="food-timer-label">2.0s</div>
+    </div>
+    <div id="tr-joystick-left" class="joystick-zone left hidden">
+      <div class="joystick-outer" id="tr-joy-outer-l"><div class="joystick-inner" id="tr-joy-inner-l"></div></div>
+    </div>
+  </div>
+
   <!-- RESULT -->
   <div id="screen-result" class="screen hidden">
     <div class="result-title" id="result-title"></div>
     <div class="stats-grid" id="result-stats"></div>
     <div class="mode-row">
-      <button class="btn btn-green" onclick="restartGame()">▶ PLAY AGAIN</button>
-      <button class="btn" onclick="showScreen('screen-snake-select')">CHANGE SNAKE</button>
+      <button class="btn btn-green" id="btn-play-again" onclick="handlePlayAgain()">▶ PLAY AGAIN</button>
+      <button class="btn" id="btn-change" onclick="handleChange()">CHANGE SNAKE</button>
       <button class="btn btn-red" onclick="showScreen('screen-menu')">⌂ HOME</button>
     </div>
   </div>
@@ -169,24 +253,24 @@ canvas{display:block;position:absolute;top:0;left:0}
   <div id="screen-instructions" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(20px,4vw,36px)">HOW TO PLAY</div>
     <div class="instructions-box">
-      <h2>OBJECTIVE</h2>
-      <p>UNCOIL is a serpent battle game. Choose your snake and fight inside a circular arena. Reduce your opponent's 15 HP to zero to win.</p>
-      <h2>COMBAT</h2>
+      <h2>✂️ MODE 1 — TAIL REMOVAL</h2>
+      <p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−2 length) and avoid green food which grows you (+3 length).</p>
+      <li>Food spawns ahead of your snake — you have 2 seconds to react</li>
+      <li>After 2 seconds food disappears and new food spawns</li>
+      <li>First to reach length 1 wins!</li>
+      <h2>⚔️ MODE 2 — PREDATOR</h2>
+      <p>Fight inside a circular arena. Reduce your opponent's 15 HP to zero to win.</p>
       <li>Hit opponent's body with your head to deal damage (−1 HP)</li>
       <li>Hitting the arena wall slows you briefly</li>
       <li>You cannot collide head-to-head — use your body as a weapon</li>
-      <h2>SNAKES</h2>
-      <li><span style="color:#0ff">⚡ SPECTER</span> — Balanced combatant. Speed 7, Attack 7, Defense 7.</li>
-      <li><span style="color:#f0a">💥 LEVIATHAN</span> — Balanced combatant. Speed 7, Attack 7, Defense 7.</li>
-      <li>Matches must be SPECTER vs LEVIATHAN — mirror matches not allowed</li>
       <h2>CONTROLS</h2>
-      <li>Player 1 (SPECTER): A / D keys to steer</li>
-      <li>Player 2 (LEVIATHAN / local): Arrow Left / Right to steer</li>
-      <li>Mobile: On-screen virtual joysticks</li>
+      <li>Player 1: A / D keys to steer</li>
+      <li>Player 2 (local Predator): Arrow Left / Right to steer</li>
+      <li>Mobile: On-screen virtual joystick</li>
       <h2>BOT DIFFICULTY</h2>
-      <li>Easy — slow reactions, random movement, misses often, drifts into walls</li>
-      <li>Medium — moderate tracking, feints, short prediction, wall avoidance</li>
-      <li>Hard — predictive targeting, traps, baiting retreats, counter-attacks</li>
+      <li>Easy — slow, random, makes mistakes often</li>
+      <li>Medium — moderate tracking, feints, prediction</li>
+      <li>Hard — predictive targeting, traps, counter-attacks</li>
     </div>
     <button class="btn" style="margin-top:20px" onclick="showScreen('screen-menu')">← BACK</button>
   </div>
@@ -212,11 +296,12 @@ canvas{display:block;position:absolute;top:0;left:0}
   </div>
 
 </div><!-- end #ui -->
-
 <script>
-// ─── CANVAS SETUP ─────────────────────────────────────────────────────────────
-const BG  = document.getElementById('bg');
-const GC  = document.getElementById('game');
+// ═══════════════════════════════════════════════════════════════
+// CANVAS & GLOBALS
+// ═══════════════════════════════════════════════════════════════
+const BG = document.getElementById('bg');
+const GC = document.getElementById('game');
 const bgCtx = BG.getContext('2d');
 const ctx   = GC.getContext('2d');
 
@@ -224,725 +309,973 @@ let W, H, CX, CY, RADIUS;
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
   BG.width = GC.width = W; BG.height = GC.height = H;
-  CX = W / 2; CY = H / 2;
-  RADIUS = Math.min(W, H) * 0.42;
+  CX = W/2; CY = H/2;
+  RADIUS = Math.min(W,H)*0.42;
 }
 resize();
-window.addEventListener('resize', () => { resize(); if (gameActive) initPositions(); });
+window.addEventListener('resize',()=>{ resize(); if(gameActive) initPositions(); });
 
-// ─── SETTINGS ─────────────────────────────────────────────────────────────────
-const settings = { particles: true, shake: true, trails: true };
-function toggleSetting(k) {
-  settings[k] = !settings[k];
-  document.getElementById('toggle-' + k).textContent = settings[k] ? 'ON' : 'OFF';
-  document.getElementById('toggle-' + k).classList.toggle('active', settings[k]);
+const settings = { particles:true, shake:true, trails:true };
+function toggleSetting(k){
+  settings[k]=!settings[k];
+  document.getElementById('toggle-'+k).textContent=settings[k]?'ON':'OFF';
+  document.getElementById('toggle-'+k).classList.toggle('active',settings[k]);
 }
 
-// ─── SCREEN NAV ───────────────────────────────────────────────────────────────
 let currentScreen = 'screen-menu';
-function showScreen(id) {
+function showScreen(id){
   document.getElementById(currentScreen).classList.add('hidden');
   document.getElementById(id).classList.remove('hidden');
-  currentScreen = id;
+  currentScreen=id;
 }
 
-// ─── STAT BARS ────────────────────────────────────────────────────────────────
-function buildStatBars() {
-  const fill = (id, val, cls) => {
-    const el = document.getElementById(id); if (!el) return;
-    el.innerHTML = '';
-    for (let i = 0; i < 10; i++) {
-      const d = document.createElement('div');
-      d.className = 'stat-pip' + (i < val ? ' on' + cls : '');
+// ═══════════════════════════════════════════════════════════════
+// STAT BARS (Predator mode)
+// ═══════════════════════════════════════════════════════════════
+function buildStatBars(){
+  const fill=(id,val)=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.innerHTML='';
+    for(let i=0;i<10;i++){
+      const d=document.createElement('div');
+      d.className='stat-pip'+(i<val?' on':'');
       el.appendChild(d);
     }
   };
-  fill('bar-spd-s', 7, ''); fill('bar-atk-s', 7, ''); fill('bar-def-s', 7, '');
-  fill('bar-spd-b', 7, ''); fill('bar-atk-b', 7, ''); fill('bar-def-b', 7, '');
+  fill('bar-spd-s',7); fill('bar-atk-s',7); fill('bar-def-s',7);
+  fill('bar-spd-b',7); fill('bar-atk-b',7); fill('bar-def-b',7);
 }
 buildStatBars();
 
-// ─── GAME MODE / SELECTION ────────────────────────────────────────────────────
-let gameMode = 'bot', botDiff = 'easy';
-let p1Snake = null, p2Snake = null;
-let selectionStep = 0;
+// ═══════════════════════════════════════════════════════════════
+// PREDATOR MODE SELECTION
+// ═══════════════════════════════════════════════════════════════
+let gameMode='bot', botDiff='easy';
+let p1Snake=null, p2Snake=null, selectionStep=0;
 
-function setupMode(m) {
-  gameMode = m; selectionStep = 0; p1Snake = null; p2Snake = null;
+function setupMode(m){
+  gameMode=m; selectionStep=0; p1Snake=null; p2Snake=null;
   document.getElementById('card-small').classList.remove('selected');
   document.getElementById('card-big').classList.remove('selected');
   document.getElementById('btn-start-game').classList.add('hidden');
-  document.getElementById('diff-section').classList.toggle('hidden', m !== 'bot');
-  document.getElementById('select-instruction').textContent =
-    m === 'bot' ? 'Choose your snake:' : 'Player 1: Pick your snake';
+  document.getElementById('diff-section').classList.toggle('hidden',m!=='bot');
+  document.getElementById('select-instruction').textContent=m==='bot'?'Choose your snake:':'Player 1: Pick your snake';
 }
-
-function selectSnake(t) {
-  if (gameMode === 'bot') {
-    p1Snake = t; p2Snake = (t === 'small' ? 'big' : 'small');
-    document.getElementById('card-small').classList.toggle('selected', t === 'small');
-    document.getElementById('card-big').classList.toggle('selected', t === 'big');
+function selectSnake(t){
+  if(gameMode==='bot'){
+    p1Snake=t; p2Snake=(t==='small'?'big':'small');
+    document.getElementById('card-small').classList.toggle('selected',t==='small');
+    document.getElementById('card-big').classList.toggle('selected',t==='big');
     document.getElementById('btn-start-game').classList.remove('hidden');
     return;
   }
-  if (selectionStep === 0) {
-    p1Snake = t;
-    document.getElementById('card-small').classList.toggle('selected', t === 'small');
-    document.getElementById('card-big').classList.toggle('selected', t === 'big');
-    selectionStep = 1;
-    document.getElementById('select-instruction').textContent = 'Player 2: Pick your snake (must be different)';
+  if(selectionStep===0){
+    p1Snake=t;
+    document.getElementById('card-small').classList.toggle('selected',t==='small');
+    document.getElementById('card-big').classList.toggle('selected',t==='big');
+    selectionStep=1;
+    document.getElementById('select-instruction').textContent='Player 2: Pick your snake (must be different)';
   } else {
-    if (t === p1Snake) {
-      document.getElementById('select-instruction').textContent = '❌ Must be different! Player 2: Pick the other snake';
-      return;
-    }
-    p2Snake = t;
+    if(t===p1Snake){ document.getElementById('select-instruction').textContent='❌ Must be different! Player 2: Pick the other snake'; return; }
+    p2Snake=t;
     document.getElementById('card-small').classList.add('selected');
     document.getElementById('card-big').classList.add('selected');
     document.getElementById('btn-start-game').classList.remove('hidden');
   }
 }
-
-function setDiff(d, btn) {
-  botDiff = d;
-  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+function setDiff(d,btn){
+  botDiff=d;
+  document.querySelectorAll('#screen-snake-select .diff-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 }
 
-// ─── MATCHMAKING (stub) ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// MATCHMAKING
+// ═══════════════════════════════════════════════════════════════
 let matchInterval;
-function startMatchmaking() {
-  let t = 60;
-  document.getElementById('match-timer').textContent = t;
-  document.getElementById('match-status').textContent = 'SEARCHING FOR OPPONENT...';
-  matchInterval = setInterval(() => {
-    t--;
-    document.getElementById('match-timer').textContent = t;
-    if (t <= 0) {
+function startMatchmaking(){
+  let t=60;
+  document.getElementById('match-timer').textContent=t;
+  document.getElementById('match-status').textContent='SEARCHING FOR OPPONENT...';
+  matchInterval=setInterval(()=>{
+    t--; document.getElementById('match-timer').textContent=t;
+    if(t<=0){
       clearInterval(matchInterval);
-      document.getElementById('match-status').textContent = 'MATCHMAKING FAILED. TRY AGAIN LATER.';
-      document.getElementById('match-timer').textContent = '';
-      setTimeout(() => showScreen('screen-modes'), 2500);
+      document.getElementById('match-status').textContent='MATCHMAKING FAILED. TRY AGAIN LATER.';
+      document.getElementById('match-timer').textContent='';
+      setTimeout(()=>showScreen('screen-modes'),2500);
     }
-  }, 1000);
+  },1000);
 }
-function cancelMatchmaking() { clearInterval(matchInterval); showScreen('screen-modes'); }
+function cancelMatchmaking(){ clearInterval(matchInterval); showScreen('screen-modes'); }
 
-// ─── SNAKE CLASS ──────────────────────────────────────────────────────────────
-const SEGMENT_SIZE = 8;
-const SNAKE_CONFIGS = {
-  small: { length: 14, speed: 2.1, turnSpeed: 0.07, color: '#0ff', glow: '#0af', hp: 15, dmg: 1 },
-  big:   { length: 14, speed: 2.1, turnSpeed: 0.07, color: '#f0a', glow: '#f04', hp: 15, dmg: 1 }
+// ═══════════════════════════════════════════════════════════════
+// SNAKE CLASS (shared by both modes)
+// ═══════════════════════════════════════════════════════════════
+const SEGMENT_SIZE=8;
+const SNAKE_CONFIGS={
+  small:{ length:14, speed:2.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
+  big:  { length:14, speed:2.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 
 class Snake {
-  constructor(cfg, x, y, angle, isP2) {
-    this.cfg = cfg; this.x = x; this.y = y; this.angle = angle; this.isP2 = isP2;
-    this.hp = cfg.hp; this.maxHp = cfg.hp;
-    this.speed = cfg.speed; this.turnSpeed = cfg.turnSpeed;
-    this.color = cfg.color; this.glow = cfg.glow;
-    this.segments = []; this.trail = [];
-    this.hitCooldown = 0; this.wallSlowTimer = 0; this.alive = true;
-    this.hits = 0; this.dmgDealt = 0;
-    for (let i = 0; i < cfg.length; i++)
-      this.segments.push({ x: x - Math.cos(angle) * i * SEGMENT_SIZE, y: y - Math.sin(angle) * i * SEGMENT_SIZE });
+  constructor(cfg,x,y,angle,isP2){
+    this.cfg=cfg; this.x=x; this.y=y; this.angle=angle; this.isP2=isP2;
+    this.hp=cfg.hp; this.maxHp=cfg.hp;
+    this.speed=cfg.speed; this.turnSpeed=cfg.turnSpeed;
+    this.color=cfg.color; this.glow=cfg.glow;
+    this.segments=[]; this.trail=[];
+    this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true;
+    this.hits=0; this.dmgDealt=0;
+    for(let i=0;i<cfg.length;i++)
+      this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE, y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
-  turn(dir) {
-    this.angle += dir * this.turnSpeed;
-  }
-  update() {
-    if (!this.alive) return;
-    if (this.hitCooldown > 0) this.hitCooldown--;
-    let spd = this.speed;
-    if (this.wallSlowTimer > 0) { spd *= 0.4; this.wallSlowTimer--; }
-    let nx = this.x + Math.cos(this.angle) * spd;
-    let ny = this.y + Math.sin(this.angle) * spd;
-    const dist = Math.hypot(nx - CX, ny - CY);
-    if (dist > RADIUS - SEGMENT_SIZE) {
-      const pushAngle = Math.atan2(CY - ny, CX - nx);
-      this.angle = pushAngle + (Math.random() - .5) * 0.5;
-      nx = this.x + Math.cos(this.angle) * spd;
-      ny = this.y + Math.sin(this.angle) * spd;
-      this.wallSlowTimer = 30;
-      addParticles(this.x, this.y, this.color, 6);
+  turn(dir){ this.angle+=dir*this.turnSpeed; }
+  update(){
+    if(!this.alive) return;
+    if(this.hitCooldown>0) this.hitCooldown--;
+    let spd=this.speed;
+    if(this.wallSlowTimer>0){ spd*=0.4; this.wallSlowTimer--; }
+    let nx=this.x+Math.cos(this.angle)*spd;
+    let ny=this.y+Math.sin(this.angle)*spd;
+    const dist=Math.hypot(nx-CX,ny-CY);
+    if(dist>RADIUS-SEGMENT_SIZE){
+      const pushAngle=Math.atan2(CY-ny,CX-nx);
+      this.angle=pushAngle+(Math.random()-.5)*0.5;
+      nx=this.x+Math.cos(this.angle)*spd;
+      ny=this.y+Math.sin(this.angle)*spd;
+      this.wallSlowTimer=30;
+      addParticles(this.x,this.y,this.color,6);
     }
-    this.x = nx; this.y = ny;
-    this.segments.unshift({ x: this.x, y: this.y });
-    while (this.segments.length > this.cfg.length) this.segments.pop();
-    if (settings.trails) {
-      this.trail.push({ x: this.x, y: this.y, a: 1 });
-      while (this.trail.length > 40) this.trail.shift();
-    }
+    this.x=nx; this.y=ny;
+    this.segments.unshift({x:this.x,y:this.y});
+    while(this.segments.length>this.cfg.length) this.segments.pop();
+    if(settings.trails){ this.trail.push({x:this.x,y:this.y,a:1}); while(this.trail.length>40) this.trail.shift(); }
   }
-  draw() {
-    if (!this.alive) return;
-    if (settings.trails) {
-      this.trail.forEach((t, i) => {
-        ctx.save(); ctx.globalAlpha = t.a * (i / this.trail.length) * 0.25;
-        ctx.beginPath(); ctx.arc(t.x, t.y, SEGMENT_SIZE * .5, 0, Math.PI * 2);
-        ctx.fillStyle = this.glow; ctx.fill(); ctx.restore();
+  draw(){
+    if(!this.alive) return;
+    if(settings.trails){
+      this.trail.forEach((t,i)=>{
+        ctx.save(); ctx.globalAlpha=t.a*(i/this.trail.length)*0.25;
+        ctx.beginPath(); ctx.arc(t.x,t.y,SEGMENT_SIZE*.5,0,Math.PI*2);
+        ctx.fillStyle=this.glow; ctx.fill(); ctx.restore();
       });
     }
-    ctx.save(); ctx.shadowColor = this.glow; ctx.shadowBlur = 16;
-    for (let i = this.segments.length - 1; i >= 0; i--) {
-      const s = this.segments[i];
-      const t = 1 - i / this.segments.length;
-      const r = SEGMENT_SIZE * (0.4 + t * 0.7);
-      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = i === 0 ? this.color : `rgba(${hexToRgb(this.color)},${t * .85})`;
+    ctx.save(); ctx.shadowColor=this.glow; ctx.shadowBlur=16;
+    for(let i=this.segments.length-1;i>=0;i--){
+      const s=this.segments[i];
+      const t=1-i/this.segments.length;
+      const r=SEGMENT_SIZE*(0.4+t*0.7);
+      ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
+      ctx.fillStyle=i===0?this.color:`rgba(${hexToRgb(this.color)},${t*.85})`;
       ctx.fill();
     }
-    if (this.hitCooldown > 0 && this.hitCooldown % 4 < 2) {
-      ctx.beginPath(); ctx.arc(this.x, this.y, SEGMENT_SIZE * 2.5, 0, Math.PI * 2);
-      ctx.strokeStyle = this.glow; ctx.lineWidth = 2; ctx.globalAlpha = .5; ctx.stroke();
+    if(this.hitCooldown>0&&this.hitCooldown%4<2){
+      ctx.beginPath(); ctx.arc(this.x,this.y,SEGMENT_SIZE*2.5,0,Math.PI*2);
+      ctx.strokeStyle=this.glow; ctx.lineWidth=2; ctx.globalAlpha=.5; ctx.stroke();
     }
     ctx.restore();
   }
 }
 
-function hexToRgb(h) {
-  if (h.length === 4)
-    return `${parseInt(h[1]+h[1],16)},${parseInt(h[2]+h[2],16)},${parseInt(h[3]+h[3],16)}`;
+function hexToRgb(h){
+  if(h.length===4) return `${parseInt(h[1]+h[1],16)},${parseInt(h[2]+h[2],16)},${parseInt(h[3]+h[3],16)}`;
   return `${parseInt(h.slice(1,3),16)},${parseInt(h.slice(3,5),16)},${parseInt(h.slice(5,7),16)}`;
 }
 
-// ─── PARTICLES ────────────────────────────────────────────────────────────────
-let particles = [];
-function addParticles(x, y, color, n) {
-  n = n || 12;
-  if (!settings.particles) return;
-  for (let i = 0; i < n; i++)
-    particles.push({ x, y, vx:(Math.random()-.5)*4, vy:(Math.random()-.5)*4, life:1, color, r:Math.random()*3+1 });
+// ═══════════════════════════════════════════════════════════════
+// PARTICLES & SHAKE (shared)
+// ═══════════════════════════════════════════════════════════════
+let particles=[];
+function addParticles(x,y,color,n){
+  n=n||12; if(!settings.particles) return;
+  for(let i=0;i<n;i++) particles.push({x,y,vx:(Math.random()-.5)*4,vy:(Math.random()-.5)*4,life:1,color,r:Math.random()*3+1});
 }
-function updateParticles() {
-  particles = particles.filter(p => {
-    p.x += p.vx; p.y += p.vy; p.life -= 0.04; p.vx *= 0.92; p.vy *= 0.92;
-    return p.life > 0;
+function updateParticles(){
+  particles=particles.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.life-=0.04; p.vx*=0.92; p.vy*=0.92; return p.life>0; });
+}
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.save(); ctx.globalAlpha=p.life; ctx.shadowColor=p.color; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
   });
 }
-function drawParticles() {
-  particles.forEach(p => {
-    ctx.save(); ctx.globalAlpha = p.life;
-    ctx.shadowColor = p.color; ctx.shadowBlur = 8;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = p.color; ctx.fill(); ctx.restore();
-  });
-}
-
-// ─── SCREEN SHAKE ─────────────────────────────────────────────────────────────
-let shakeX = 0, shakeY = 0, shakePwr = 0;
-function triggerShake() { if (settings.shake) shakePwr = 12; }
-function updateShake() {
-  if (shakePwr > 0) {
-    shakeX = (Math.random()-.5)*shakePwr; shakeY = (Math.random()-.5)*shakePwr;
-    shakePwr *= 0.8;
-    if (shakePwr < 0.5) { shakePwr = 0; shakeX = 0; shakeY = 0; }
+let shakeX=0,shakeY=0,shakePwr=0;
+function triggerShake(){ if(settings.shake) shakePwr=12; }
+function updateShake(){
+  if(shakePwr>0){
+    shakeX=(Math.random()-.5)*shakePwr; shakeY=(Math.random()-.5)*shakePwr;
+    shakePwr*=0.8;
+    if(shakePwr<0.5){ shakePwr=0; shakeX=0; shakeY=0; }
   }
 }
 
-// ─── GAME STATE (single declaration block) ────────────────────────────────────
-let snake1, snake2, specterSnake, leviathanSnake;
-let gameActive = false;
-let keys = {};
-let finalSlowMo = false, finalSlowMoFrames = 0;
-let gameStartTime = 0;
-let inputDir1 = { x:0, y:0 }, inputDir2 = { x:0, y:0 };
-let bgParticles = [];
+// ═══════════════════════════════════════════════════════════════
+// PREDATOR MODE GAME STATE
+// ═══════════════════════════════════════════════════════════════
+let snake1,snake2,specterSnake,leviathanSnake;
+let gameActive=false, keys={};
+let finalSlowMo=false, finalSlowMoFrames=0;
+let gameStartTime=0;
+let inputDir1={x:0,y:0}, inputDir2={x:0,y:0};
+let bgParticles=[];
 let animFrame;
 
-// ─── BOT AI STATE ─────────────────────────────────────────────────────────────
-const bot = {
-  actionFrame: 0,
-  lastDecisionFrame: 0,
-  state: 'wander',
-  stateTimer: 0,
-  wanderAngle: 0,
-  wanderTimer: 0,
-  missTimer: 0,
-  feintDir: 0,
-  feintTimer: 0,
-  baitTimer: 0,
-  baitPhase: false,
-  counterTimer: 0,
-  trapPhase: false,
-
-  reset() {
-    this.actionFrame = 0; this.lastDecisionFrame = 0;
-    this.state = 'wander'; this.stateTimer = 0;
-    this.wanderAngle = Math.random() * Math.PI * 2; this.wanderTimer = 0; this.missTimer = 0;
-    this.feintDir = 0; this.feintTimer = 0;
-    this.baitTimer = 0; this.baitPhase = false;
-    this.counterTimer = 0; this.trapPhase = false;
+// ═══════════════════════════════════════════════════════════════
+// PREDATOR BOT AI
+// ═══════════════════════════════════════════════════════════════
+const bot={
+  actionFrame:0,lastDecisionFrame:0,state:'wander',stateTimer:0,
+  wanderAngle:0,wanderTimer:0,missTimer:0,feintDir:0,feintTimer:0,
+  baitTimer:0,baitPhase:false,counterTimer:0,trapPhase:false,
+  reset(){
+    this.actionFrame=0; this.lastDecisionFrame=0;
+    this.state='wander'; this.stateTimer=0;
+    this.wanderAngle=Math.random()*Math.PI*2; this.wanderTimer=0; this.missTimer=0;
+    this.feintDir=0; this.feintTimer=0;
+    this.baitTimer=0; this.baitPhase=false;
+    this.counterTimer=0; this.trapPhase=false;
   }
 };
 
-// ─── EASY BOT ─────────────────────────────────────────────────────────────────
-function applyWander() {
-  if (bot.wanderTimer > 0) {
+function applyWander(){
+  if(bot.wanderTimer>0){
     bot.wanderTimer--;
-    let da = bot.wanderAngle - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    if (Math.abs(da) > 0.05) snake2.turn(Math.sign(da) * 0.4);
+    let da=bot.wanderAngle-snake2.angle;
+    while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    if(Math.abs(da)>0.05) snake2.turn(Math.sign(da)*0.4);
     return;
   }
-  if (Math.random() < 0.02) snake2.turn((Math.random() - 0.5) * 2);
+  if(Math.random()<0.02) snake2.turn((Math.random()-0.5)*2);
 }
-
-function botThinkEasy() {
+function botThinkEasy(){
   bot.actionFrame++;
-  const decisionInterval = 60 + Math.floor(Math.random() * 40);
-  if (bot.actionFrame - bot.lastDecisionFrame < decisionInterval) {
-    if (bot.state === 'pursue') executeEasyPursuit();
-    else applyWander();
-    return;
-  }
-  bot.lastDecisionFrame = bot.actionFrame;
-  const head = snake2.segments[0];
-  const dist = Math.hypot(snake1.x - head.x, snake1.y - head.y);
-  if (Math.random() < 0.30) {
-    bot.wanderAngle = Math.random() * Math.PI * 2;
-    bot.wanderTimer = 40 + Math.floor(Math.random() * 60);
-    bot.state = 'wander';
-  } else if (dist < RADIUS * 0.6 && Math.random() < 0.5) {
-    bot.state = 'pursue';
-    bot.missTimer = Math.random() < 0.45 ? 30 + Math.random() * 40 : 0;
-  } else {
-    bot.state = 'wander';
-    bot.wanderAngle = snake2.angle + (Math.random() - 0.5) * Math.PI;
-    bot.wanderTimer = 50;
-  }
+  const di=60+Math.floor(Math.random()*40);
+  if(bot.actionFrame-bot.lastDecisionFrame<di){ if(bot.state==='pursue') executeEasyPursuit(); else applyWander(); return; }
+  bot.lastDecisionFrame=bot.actionFrame;
+  const head=snake2.segments[0];
+  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
+  if(Math.random()<0.30){ bot.wanderAngle=Math.random()*Math.PI*2; bot.wanderTimer=40+Math.floor(Math.random()*60); bot.state='wander'; }
+  else if(dist<RADIUS*0.6&&Math.random()<0.5){ bot.state='pursue'; bot.missTimer=Math.random()<0.45?30+Math.random()*40:0; }
+  else{ bot.state='wander'; bot.wanderAngle=snake2.angle+(Math.random()-0.5)*Math.PI; bot.wanderTimer=50; }
 }
-
-function executeEasyPursuit() {
-  if (bot.missTimer > 0) {
+function executeEasyPursuit(){
+  if(bot.missTimer>0){
     bot.missTimer--;
-    const missOffset = 1.0 + Math.random() * 0.5;
-    const a = Math.atan2(snake1.y - snake2.y, snake1.x - snake2.x) + missOffset;
-    let da = a - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake2.turn(Math.sign(da) * 0.5);
-    return;
+    const a=Math.atan2(snake1.y-snake2.y,snake1.x-snake2.x)+1.0+Math.random()*0.5;
+    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    snake2.turn(Math.sign(da)*0.5); return;
   }
-  const a = Math.atan2(snake1.y - snake2.y, snake1.x - snake2.x);
-  let da = a - snake2.angle;
-  while (da > Math.PI) da -= Math.PI * 2;
-  while (da < -Math.PI) da += Math.PI * 2;
-  snake2.turn(Math.sign(da) * Math.min(0.5, Math.abs(da) * 0.4));
+  const a=Math.atan2(snake1.y-snake2.y,snake1.x-snake2.x);
+  let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+  snake2.turn(Math.sign(da)*Math.min(0.5,Math.abs(da)*0.4));
 }
-
-// ─── MEDIUM BOT ───────────────────────────────────────────────────────────────
-function botThinkMedium() {
+function botThinkMedium(){
   bot.actionFrame++;
-  const head = snake2.segments[0];
-  const dist = Math.hypot(snake1.x - head.x, snake1.y - head.y);
-  const wallDist = RADIUS - Math.hypot(head.x - CX, head.y - CY);
-
-  // Execute active feint
-  if (bot.feintTimer > 0) {
-    bot.feintTimer--;
-    snake2.turn(bot.feintDir * 0.9);
-    if (bot.feintTimer === 0) bot.state = 'attack';
-    return;
-  }
-
-  const decisionInterval = 18 + Math.floor(Math.random() * 12);
-  if (bot.actionFrame - bot.lastDecisionFrame < decisionInterval) {
-    executeMediumMove(dist, wallDist);
-    return;
-  }
-  bot.lastDecisionFrame = bot.actionFrame;
-
-  if (wallDist < RADIUS * 0.22) {
-    bot.state = 'dodge'; bot.stateTimer = 25;
-  } else if (dist < RADIUS * 0.5 && Math.random() < 0.25 && bot.state !== 'feint') {
-    bot.state = 'feint';
-    bot.feintDir = Math.random() < 0.5 ? 1 : -1;
-    bot.feintTimer = 10 + Math.floor(Math.random() * 8);
-  } else if (dist < RADIUS * 0.75) {
-    bot.state = 'pursue';
-  } else {
-    bot.state = 'wander';
-    bot.wanderAngle = snake2.angle + (Math.random() - 0.5) * 0.8;
-    bot.wanderTimer = 30;
-  }
+  const head=snake2.segments[0];
+  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
+  const wallDist=RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  if(bot.feintTimer>0){ bot.feintTimer--; snake2.turn(bot.feintDir*0.9); if(bot.feintTimer===0) bot.state='attack'; return; }
+  const di=18+Math.floor(Math.random()*12);
+  if(bot.actionFrame-bot.lastDecisionFrame<di){ executeMediumMove(dist,wallDist); return; }
+  bot.lastDecisionFrame=bot.actionFrame;
+  if(wallDist<RADIUS*0.22){ bot.state='dodge'; bot.stateTimer=25; }
+  else if(dist<RADIUS*0.5&&Math.random()<0.25&&bot.state!=='feint'){ bot.state='feint'; bot.feintDir=Math.random()<0.5?1:-1; bot.feintTimer=10+Math.floor(Math.random()*8); }
+  else if(dist<RADIUS*0.75){ bot.state='pursue'; }
+  else{ bot.state='wander'; bot.wanderAngle=snake2.angle+(Math.random()-0.5)*0.8; bot.wanderTimer=30; }
 }
-
-function executeMediumMove(dist, wallDist) {
-  const head = snake2.segments[0];
-  if (bot.stateTimer > 0) {
+function executeMediumMove(dist,wallDist){
+  const head=snake2.segments[0];
+  if(bot.stateTimer>0){
     bot.stateTimer--;
-    const ca = Math.atan2(CY - head.y, CX - head.x);
-    let da = ca - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake2.turn(Math.sign(da) * 0.85);
-    return;
+    const ca=Math.atan2(CY-head.y,CX-head.x);
+    let da=ca-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    snake2.turn(Math.sign(da)*0.85); return;
   }
-  if (bot.state === 'pursue' || bot.state === 'attack') {
-    const predict = 8;
-    const tx = snake1.x + Math.cos(snake1.angle) * snake1.speed * predict;
-    const ty = snake1.y + Math.sin(snake1.angle) * snake1.speed * predict;
-    const a = Math.atan2(ty - head.y, tx - head.x);
-    let da = a - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    const noise = (Math.random() - 0.5) * 0.25;
-    snake2.turn((Math.sign(da) + noise) * Math.min(1.0, Math.abs(da) * 1.2));
-  } else if (bot.state === 'wander') {
-    applyWander();
-  } else {
-    const a = Math.atan2(snake1.y - head.y, snake1.x - head.x);
-    let da = a - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake2.turn(Math.sign(da) * 0.7);
+  if(bot.state==='pursue'||bot.state==='attack'){
+    const tx=snake1.x+Math.cos(snake1.angle)*snake1.speed*8;
+    const ty=snake1.y+Math.sin(snake1.angle)*snake1.speed*8;
+    const a=Math.atan2(ty-head.y,tx-head.x);
+    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.25)*Math.min(1.0,Math.abs(da)*1.2));
+  } else if(bot.state==='wander'){ applyWander(); }
+  else {
+    const a=Math.atan2(snake1.y-head.y,snake1.x-head.x);
+    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    snake2.turn(Math.sign(da)*0.7);
   }
 }
-
-// ─── HARD BOT ─────────────────────────────────────────────────────────────────
-function botThinkHard() {
+function botThinkHard(){
   bot.actionFrame++;
-  const head = snake2.segments[0];
-  const dist = Math.hypot(snake1.x - head.x, snake1.y - head.y);
-  const wallDist = RADIUS - Math.hypot(head.x - CX, head.y - CY);
-  const playerWallDist = RADIUS - Math.hypot(snake1.x - CX, snake1.y - CY);
-
-  const decisionInterval = 6 + Math.floor(Math.random() * 4);
-  if (bot.actionFrame - bot.lastDecisionFrame < decisionInterval) {
-    executeHardMove(dist, wallDist, playerWallDist);
-    return;
-  }
-  bot.lastDecisionFrame = bot.actionFrame;
-
-  if (bot.counterTimer > 0) {
-    bot.counterTimer--;
-    bot.state = 'attack';
-  } else if (wallDist < RADIUS * 0.15) {
-    bot.state = 'escape'; bot.stateTimer = 20;
-  } else if (playerWallDist < RADIUS * 0.28 && dist < RADIUS * 0.55 && Math.random() < 0.55) {
-    bot.state = 'trap'; bot.stateTimer = 30 + Math.floor(Math.random() * 20); bot.trapPhase = true;
-  } else if (dist < RADIUS * 0.4 && Math.random() < 0.15 && !bot.baitPhase) {
-    bot.state = 'bait'; bot.baitTimer = 20 + Math.floor(Math.random() * 15); bot.baitPhase = true;
-  } else if (dist < RADIUS * 0.65) {
-    bot.state = 'attack'; bot.baitPhase = false;
-  } else {
-    bot.state = 'pursue';
+  const head=snake2.segments[0];
+  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
+  const wallDist=RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  const playerWallDist=RADIUS-Math.hypot(snake1.x-CX,snake1.y-CY);
+  const di=6+Math.floor(Math.random()*4);
+  if(bot.actionFrame-bot.lastDecisionFrame<di){ executeHardMove(dist,wallDist,playerWallDist); return; }
+  bot.lastDecisionFrame=bot.actionFrame;
+  if(bot.counterTimer>0){ bot.counterTimer--; bot.state='attack'; }
+  else if(wallDist<RADIUS*0.15){ bot.state='escape'; bot.stateTimer=20; }
+  else if(playerWallDist<RADIUS*0.28&&dist<RADIUS*0.55&&Math.random()<0.55){ bot.state='trap'; bot.stateTimer=30+Math.floor(Math.random()*20); bot.trapPhase=true; }
+  else if(dist<RADIUS*0.4&&Math.random()<0.15&&!bot.baitPhase){ bot.state='bait'; bot.baitTimer=20+Math.floor(Math.random()*15); bot.baitPhase=true; }
+  else if(dist<RADIUS*0.65){ bot.state='attack'; bot.baitPhase=false; }
+  else bot.state='pursue';
+}
+function executeHardMove(dist,wallDist,playerWallDist){
+  const head=snake2.segments[0];
+  if(bot.state==='escape'&&bot.stateTimer>0){ bot.stateTimer--; const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*1.0); return; }
+  if(bot.state==='bait'&&bot.baitTimer>0){ bot.baitTimer--; const aa=Math.atan2(head.y-snake1.y,head.x-snake1.x); let da=aa-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*0.9); if(bot.baitTimer===0){ bot.state='attack'; bot.counterTimer=25; } return; }
+  if(bot.state==='trap'&&bot.stateTimer>0){ bot.stateTimer--; const oa=Math.atan2(snake1.y-head.y,snake1.x-head.x)+Math.PI*0.5; let da=oa-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*1.1); return; }
+  if(bot.state==='attack'||bot.state==='pursue'){
+    const predict=bot.state==='attack'?22:14;
+    let aimX=snake1.x+Math.cos(snake1.angle)*snake1.speed*predict;
+    let aimY=snake1.y+Math.sin(snake1.angle)*snake1.speed*predict;
+    if(dist<RADIUS*0.3&&snake1.segments.length>6){ const mid=snake1.segments[Math.floor(snake1.segments.length*0.45)]; aimX=mid.x; aimY=mid.y; }
+    const a=Math.atan2(aimY-head.y,aimX-head.x);
+    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.06)*Math.min(1.3,Math.abs(da)*1.8));
+    if(wallDist<RADIUS*0.2){ const ca=Math.atan2(CY-head.y,CX-head.x); let cda=ca-snake2.angle; while(cda>Math.PI) cda-=Math.PI*2; while(cda<-Math.PI) cda+=Math.PI*2; snake2.turn(Math.sign(cda)*0.6); }
   }
 }
-
-function executeHardMove(dist, wallDist, playerWallDist) {
-  const head = snake2.segments[0];
-
-  if (bot.state === 'escape' && bot.stateTimer > 0) {
-    bot.stateTimer--;
-    const ca = Math.atan2(CY - head.y, CX - head.x);
-    let da = ca - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake2.turn(Math.sign(da) * 1.0);
-    return;
-  }
-
-  if (bot.state === 'bait' && bot.baitTimer > 0) {
-    bot.baitTimer--;
-    const aa = Math.atan2(head.y - snake1.y, head.x - snake1.x);
-    let da = aa - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake2.turn(Math.sign(da) * 0.9);
-    if (bot.baitTimer === 0) { bot.state = 'attack'; bot.counterTimer = 25; }
-    return;
-  }
-
-  if (bot.state === 'trap' && bot.stateTimer > 0) {
-    bot.stateTimer--;
-    const oa = Math.atan2(snake1.y - head.y, snake1.x - head.x) + Math.PI * 0.5;
-    let da = oa - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake2.turn(Math.sign(da) * 1.1);
-    return;
-  }
-
-  if (bot.state === 'attack' || bot.state === 'pursue') {
-    const predict = bot.state === 'attack' ? 22 : 14;
-    let aimX = snake1.x + Math.cos(snake1.angle) * snake1.speed * predict;
-    let aimY = snake1.y + Math.sin(snake1.angle) * snake1.speed * predict;
-    if (dist < RADIUS * 0.3 && snake1.segments.length > 6) {
-      const mid = snake1.segments[Math.floor(snake1.segments.length * 0.45)];
-      aimX = mid.x; aimY = mid.y;
-    }
-    const a = Math.atan2(aimY - head.y, aimX - head.x);
-    let da = a - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    const noise = (Math.random() - 0.5) * 0.06;
-    snake2.turn((Math.sign(da) + noise) * Math.min(1.3, Math.abs(da) * 1.8));
-    // Proactive wall nudge even while attacking
-    if (wallDist < RADIUS * 0.2) {
-      const ca = Math.atan2(CY - head.y, CX - head.x);
-      let cda = ca - snake2.angle;
-      while (cda > Math.PI) cda -= Math.PI * 2;
-      while (cda < -Math.PI) cda += Math.PI * 2;
-      snake2.turn(Math.sign(cda) * 0.6);
-    }
-  }
+function predatorBotThink(){
+  if(!gameActive||!snake2||!snake2.alive) return;
+  if(botDiff==='easy') botThinkEasy();
+  else if(botDiff==='medium') botThinkMedium();
+  else botThinkHard();
 }
+function onBotHit(){ if(botDiff==='hard'){ bot.counterTimer=30; bot.state='attack'; } }
 
-// ─── BOT DISPATCHER ───────────────────────────────────────────────────────────
-function botThink() {
-  if (!gameActive || !snake2 || !snake2.alive) return;
-  if (botDiff === 'easy') {
-    botThinkEasy();
-  } else if (botDiff === 'medium') {
-    botThinkMedium();
-  } else {
-    botThinkHard();
-  }
+// ═══════════════════════════════════════════════════════════════
+// PREDATOR MODE — INIT & GAME LOOP
+// ═══════════════════════════════════════════════════════════════
+function initBgParticles(){
+  bgParticles=[];
+  for(let i=0;i<60;i++) bgParticles.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.5+.3,vx:(Math.random()-.5)*.2,vy:(Math.random()-.5)*.2,a:Math.random()*.6+.2});
 }
-
-function onBotHit() {
-  if (botDiff === 'hard') { bot.counterTimer = 30; bot.state = 'attack'; }
-}
-
-// ─── BG PARTICLES ─────────────────────────────────────────────────────────────
-function initBgParticles() {
-  bgParticles = [];
-  for (let i = 0; i < 60; i++)
-    bgParticles.push({ x:Math.random()*W, y:Math.random()*H, r:Math.random()*1.5+.3, vx:(Math.random()-.5)*.2, vy:(Math.random()-.5)*.2, a:Math.random()*.6+.2 });
-}
-
-// ─── INIT POSITIONS ───────────────────────────────────────────────────────────
-function initPositions() {
-  const r = RADIUS * 0.6;
-  const a1 = -Math.PI / 2, a2 = Math.PI / 2;
-  const cfg1 = SNAKE_CONFIGS[p1Snake], cfg2 = SNAKE_CONFIGS[p2Snake];
-  snake1 = new Snake(cfg1, CX + Math.cos(a1)*r, CY + Math.sin(a1)*r, a2 + .3, false);
-  snake2 = new Snake(cfg2, CX + Math.cos(a2)*r, CY + Math.sin(a2)*r, a1 - .3, true);
-  if (p1Snake === 'small') { specterSnake = snake1; leviathanSnake = snake2; }
-  else                     { specterSnake = snake2; leviathanSnake = snake1; }
+function initPositions(){
+  const r=RADIUS*0.6;
+  const a1=-Math.PI/2, a2=Math.PI/2;
+  const cfg1=SNAKE_CONFIGS[p1Snake], cfg2=SNAKE_CONFIGS[p2Snake];
+  snake1=new Snake(cfg1,CX+Math.cos(a1)*r,CY+Math.sin(a1)*r,a2+.3,false);
+  snake2=new Snake(cfg2,CX+Math.cos(a2)*r,CY+Math.sin(a2)*r,a1-.3,true);
+  if(p1Snake==='small'){ specterSnake=snake1; leviathanSnake=snake2; }
+  else { specterSnake=snake2; leviathanSnake=snake1; }
   bot.reset();
-  bot.wanderAngle = Math.atan2(CY - snake2.y, CX - snake2.x) + Math.PI;
+  bot.wanderAngle=Math.atan2(CY-snake2.y,CX-snake2.x)+Math.PI;
 }
-
-// ─── START / RESTART ──────────────────────────────────────────────────────────
-function startGame() {
+function startGame(){
   showScreen('screen-game');
-  if (gameMode === 'bot') {
-    document.getElementById('specter-name').textContent   = p2Snake === 'small' ? '🤖 SPECTER BOT'   : '⚡ SPECTER';
-    document.getElementById('leviathan-name').textContent = p2Snake === 'big'   ? '🤖 LEVIATHAN BOT' : '💥 LEVIATHAN';
+  if(gameMode==='bot'){
+    document.getElementById('specter-name').textContent=p2Snake==='small'?'🤖 SPECTER BOT':'⚡ SPECTER';
+    document.getElementById('leviathan-name').textContent=p2Snake==='big'?'🤖 LEVIATHAN BOT':'💥 LEVIATHAN';
   } else {
-    document.getElementById('specter-name').textContent   = '⚡ SPECTER';
-    document.getElementById('leviathan-name').textContent = '💥 LEVIATHAN';
+    document.getElementById('specter-name').textContent='⚡ SPECTER';
+    document.getElementById('leviathan-name').textContent='💥 LEVIATHAN';
   }
   initPositions(); initBgParticles();
-  gameActive = true; particles = []; finalSlowMo = false; finalSlowMoFrames = 0;
-  gameStartTime = Date.now(); updateHpBars();
-  const isMobile = 'ontouchstart' in window;
-  document.getElementById('joystick-left').classList.toggle('hidden', !isMobile);
-  document.getElementById('joystick-right').classList.toggle('hidden', !isMobile || gameMode !== 'local');
-  if (isMobile) setupJoysticks();
-  if (animFrame) cancelAnimationFrame(animFrame);
+  gameActive=true; particles=[]; finalSlowMo=false; finalSlowMoFrames=0;
+  gameStartTime=Date.now(); updateHpBars();
+  const isMobile='ontouchstart' in window;
+  document.getElementById('joystick-left').classList.toggle('hidden',!isMobile);
+  document.getElementById('joystick-right').classList.toggle('hidden',!isMobile||gameMode!=='local');
+  if(isMobile) setupJoysticks();
+  if(animFrame) cancelAnimationFrame(animFrame);
   gameLoop();
 }
-
-function restartGame() {
+function restartGame(){
   showScreen('screen-game');
-  initPositions(); gameActive = true; particles = [];
-  finalSlowMo = false; finalSlowMoFrames = 0;
-  gameStartTime = Date.now(); updateHpBars();
-  if (animFrame) cancelAnimationFrame(animFrame);
+  initPositions(); gameActive=true; particles=[];
+  finalSlowMo=false; finalSlowMoFrames=0;
+  gameStartTime=Date.now(); updateHpBars();
+  if(animFrame) cancelAnimationFrame(animFrame);
   gameLoop();
 }
-
-// ─── HP BARS ──────────────────────────────────────────────────────────────────
-function updateHpBars() {
-  const sp = Math.max(0, specterSnake.hp / specterSnake.maxHp) * 100;
-  document.getElementById('hp-bar-specter').style.width = sp + '%';
-  document.getElementById('hp-text-specter').textContent = Math.max(0, specterSnake.hp);
-  const lp = Math.max(0, leviathanSnake.hp / leviathanSnake.maxHp) * 100;
-  document.getElementById('hp-bar-leviathan').style.width = lp + '%';
-  document.getElementById('hp-text-leviathan').textContent = Math.max(0, leviathanSnake.hp);
+function updateHpBars(){
+  const sp=Math.max(0,specterSnake.hp/specterSnake.maxHp)*100;
+  document.getElementById('hp-bar-specter').style.width=sp+'%';
+  document.getElementById('hp-text-specter').textContent=Math.max(0,specterSnake.hp);
+  const lp=Math.max(0,leviathanSnake.hp/leviathanSnake.maxHp)*100;
+  document.getElementById('hp-bar-leviathan').style.width=lp+'%';
+  document.getElementById('hp-text-leviathan').textContent=Math.max(0,leviathanSnake.hp);
 }
-
-// ─── COLLISION ────────────────────────────────────────────────────────────────
-function checkHit(attacker, defender) {
-  if (attacker.hitCooldown > 0) return;
-  const head = attacker.segments[0];
-  for (let i = 2; i < defender.segments.length; i++) {
-    const s = defender.segments[i];
-    if (Math.hypot(head.x - s.x, head.y - s.y) < SEGMENT_SIZE * 1.6) {
-      defender.hp--;
-      attacker.hits++; attacker.dmgDealt++;
-      attacker.hitCooldown = 40; defender.hitCooldown = 20;
-      triggerShake();
-      addParticles(s.x, s.y, attacker.color, 20);
-      updateHpBars();
-      if (defender === snake2 && gameMode === 'bot') onBotHit();
-      if (defender.hp <= 0) { finalSlowMo = true; finalSlowMoFrames = 90; }
+function checkHit(attacker,defender){
+  if(attacker.hitCooldown>0) return;
+  const head=attacker.segments[0];
+  for(let i=2;i<defender.segments.length;i++){
+    const s=defender.segments[i];
+    if(Math.hypot(head.x-s.x,head.y-s.y)<SEGMENT_SIZE*1.6){
+      defender.hp--; attacker.hits++; attacker.dmgDealt++;
+      attacker.hitCooldown=40; defender.hitCooldown=20;
+      triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
+      if(defender===snake2&&gameMode==='bot') onBotHit();
+      if(defender.hp<=0){ finalSlowMo=true; finalSlowMoFrames=90; }
       break;
     }
   }
 }
-
-// ─── GAME LOOP ────────────────────────────────────────────────────────────────
-function gameLoop() {
-  if (!gameActive) return;
+function gameLoop(){
+  if(!gameActive) return;
   updateShake();
-  ctx.save(); ctx.translate(shakeX, shakeY);
-  ctx.clearRect(-shakeX - 10, -shakeY - 10, W + 20, H + 20);
+  ctx.save(); ctx.translate(shakeX,shakeY);
+  ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
   drawArena();
   handleInput();
-  if (gameMode === 'bot') botThink();
+  if(gameMode==='bot') predatorBotThink();
   snake1.update(); snake2.update();
-  checkHit(snake1, snake2); checkHit(snake2, snake1);
+  checkHit(snake1,snake2); checkHit(snake2,snake1);
   updateParticles();
-  if (finalSlowMo) {
-    finalSlowMoFrames--;
-    if (finalSlowMoFrames <= 0) { ctx.restore(); endGame(); return; }
-  }
+  if(finalSlowMo){ finalSlowMoFrames--; if(finalSlowMoFrames<=0){ ctx.restore(); endPredatorGame(); return; } }
   snake1.draw(); snake2.draw(); drawParticles();
   ctx.restore();
-  animFrame = requestAnimationFrame(gameLoop);
+  animFrame=requestAnimationFrame(gameLoop);
 }
-
-// ─── INPUT ────────────────────────────────────────────────────────────────────
-function handleInput() {
-  if (keys['a'] || keys['A']) snake1.turn(-1);
-  if (keys['d'] || keys['D']) snake1.turn(1);
-  if (gameMode === 'local') {
-    if (keys['ArrowLeft'])  snake2.turn(-1);
-    if (keys['ArrowRight']) snake2.turn(1);
+function handleInput(){
+  if(keys['a']||keys['A']) snake1.turn(-1);
+  if(keys['d']||keys['D']) snake1.turn(1);
+  if(gameMode==='local'){
+    if(keys['ArrowLeft'])  snake2.turn(-1);
+    if(keys['ArrowRight']) snake2.turn(1);
   }
-  if (inputDir1.x !== 0 || inputDir1.y !== 0) {
-    const ta = Math.atan2(inputDir1.y, inputDir1.x);
-    let da = ta - snake1.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake1.turn(Math.sign(da) * Math.min(1, Math.abs(da) * 2));
+  if(inputDir1.x!==0||inputDir1.y!==0){
+    const ta=Math.atan2(inputDir1.y,inputDir1.x);
+    let da=ta-snake1.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    snake1.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
   }
-  if ((inputDir2.x !== 0 || inputDir2.y !== 0) && gameMode === 'local') {
-    const ta = Math.atan2(inputDir2.y, inputDir2.x);
-    let da = ta - snake2.angle;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    snake2.turn(Math.sign(da) * Math.min(1, Math.abs(da) * 2));
+  if((inputDir2.x!==0||inputDir2.y!==0)&&gameMode==='local'){
+    const ta=Math.atan2(inputDir2.y,inputDir2.x);
+    let da=ta-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    snake2.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
   }
 }
-
-document.addEventListener('keydown', e => {
-  keys[e.key] = true;
-  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
-});
-document.addEventListener('keyup', e => { keys[e.key] = false; });
-
-// ─── ARENA DRAW ───────────────────────────────────────────────────────────────
-function drawArena() {
-  const grad = ctx.createRadialGradient(CX, CY, RADIUS*.7, CX, CY, RADIUS);
-  grad.addColorStop(0, 'rgba(0,30,60,0)');
-  grad.addColorStop(1, 'rgba(0,80,180,.12)');
-  ctx.beginPath(); ctx.arc(CX, CY, RADIUS, 0, Math.PI*2);
-  ctx.fillStyle = grad; ctx.fill();
-  ctx.save();
-  ctx.beginPath(); ctx.arc(CX, CY, RADIUS, 0, Math.PI*2);
-  ctx.strokeStyle = 'rgba(0,200,255,.35)'; ctx.lineWidth = 2;
-  ctx.shadowColor = '#0af'; ctx.shadowBlur = 18; ctx.stroke();
-  ctx.shadowBlur = 40; ctx.strokeStyle = 'rgba(0,200,255,.1)'; ctx.lineWidth = 8; ctx.stroke();
-  ctx.restore();
-  const t = Date.now() / 1000;
-  for (let i = 0; i < 3; i++) {
-    const a = t*.4 + i*Math.PI*2/3;
-    ctx.save(); ctx.globalAlpha = .06 + Math.sin(t+i)*.03;
-    ctx.beginPath(); ctx.arc(CX+Math.cos(a)*RADIUS*.5, CY+Math.sin(a)*RADIUS*.5, RADIUS*.12, 0, Math.PI*2);
-    ctx.fillStyle = '#0af'; ctx.fill(); ctx.restore();
+document.addEventListener('keydown',e=>{ keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault(); });
+document.addEventListener('keyup',e=>{ keys[e.key]=false; });
+function drawArena(){
+  const grad=ctx.createRadialGradient(CX,CY,RADIUS*.7,CX,CY,RADIUS);
+  grad.addColorStop(0,'rgba(0,30,60,0)'); grad.addColorStop(1,'rgba(0,80,180,.12)');
+  ctx.beginPath(); ctx.arc(CX,CY,RADIUS,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(CX,CY,RADIUS,0,Math.PI*2);
+  ctx.strokeStyle='rgba(0,200,255,.35)'; ctx.lineWidth=2; ctx.shadowColor='#0af'; ctx.shadowBlur=18; ctx.stroke();
+  ctx.shadowBlur=40; ctx.strokeStyle='rgba(0,200,255,.1)'; ctx.lineWidth=8; ctx.stroke(); ctx.restore();
+  const t=Date.now()/1000;
+  for(let i=0;i<3;i++){
+    const a=t*.4+i*Math.PI*2/3;
+    ctx.save(); ctx.globalAlpha=.06+Math.sin(t+i)*.03;
+    ctx.beginPath(); ctx.arc(CX+Math.cos(a)*RADIUS*.5,CY+Math.sin(a)*RADIUS*.5,RADIUS*.12,0,Math.PI*2);
+    ctx.fillStyle='#0af'; ctx.fill(); ctx.restore();
   }
 }
-
-// ─── END GAME ─────────────────────────────────────────────────────────────────
-function endGame() {
-  cancelAnimationFrame(animFrame); gameActive = false;
-  const specterWins = leviathanSnake.hp <= 0;
-  const elapsed = Math.round((Date.now() - gameStartTime) / 1000);
+function endPredatorGame(){
+  cancelAnimationFrame(animFrame); gameActive=false;
+  const specterWins=leviathanSnake.hp<=0;
+  const elapsed=Math.round((Date.now()-gameStartTime)/1000);
   let winnerLabel;
-  if (gameMode === 'bot') {
-    if (specterWins) winnerLabel = p1Snake === 'small' ? '⚡ SPECTER WINS!' : '🤖 SPECTER BOT WINS!';
-    else             winnerLabel = p1Snake === 'big'   ? '💥 LEVIATHAN WINS!' : '🤖 LEVIATHAN BOT WINS!';
-  } else {
-    winnerLabel = specterWins ? '⚡ SPECTER WINS!' : '💥 LEVIATHAN WINS!';
+  if(gameMode==='bot'){
+    if(specterWins) winnerLabel=p1Snake==='small'?'⚡ SPECTER WINS!':'🤖 SPECTER BOT WINS!';
+    else winnerLabel=p1Snake==='big'?'💥 LEVIATHAN WINS!':'🤖 LEVIATHAN BOT WINS!';
+  } else { winnerLabel=specterWins?'⚡ SPECTER WINS!':'💥 LEVIATHAN WINS!'; }
+  const w=specterWins?specterSnake:leviathanSnake;
+  showResultScreen(winnerLabel,specterWins,
+    `<div>Hits Landed</div><span>${w.hits}</span><div>Damage Dealt</div><span>${w.dmgDealt}</span><div>Match Time</div><span>${elapsed}s</span><div>Winner HP Left</div><span>${Math.max(0,w.hp)}</span>`,
+    'predator');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAIL REMOVAL MODE
+// ═══════════════════════════════════════════════════════════════
+const TR_INIT_LENGTH=20;
+const TR_FOOD_LIFETIME=2000; // ms
+const TR_FOOD_AHEAD_DIST=80; // px ahead of head
+const TR_TICK=16; // ms per frame target
+
+// Difficulty configs for tail removal
+const TR_DIFF={
+  easy:{
+    reactionMs:900,       // how long before bot reacts to food
+    decisionInterval:70,  // frames between decisions
+    goodFoodChance:0.45,  // chance bot correctly goes for red food
+    wrongFoodChance:0.35, // chance bot goes for green food by mistake
+    turnSpeed:0.55,
+    redEffect:-3, greenEffect:2  // easy: red helps more, green hurts less
+  },
+  medium:{
+    reactionMs:450,
+    decisionInterval:30,
+    goodFoodChance:0.72,
+    wrongFoodChance:0.18,
+    turnSpeed:0.80,
+    redEffect:-2, greenEffect:3
+  },
+  hard:{
+    reactionMs:120,
+    decisionInterval:8,
+    goodFoodChance:0.95,
+    wrongFoodChance:0.04,
+    turnSpeed:1.0,
+    redEffect:-1, greenEffect:4  // hard: shrinking is harder
   }
-  const titleEl = document.getElementById('result-title');
-  titleEl.textContent = winnerLabel;
-  titleEl.className = 'result-title ' + (specterWins ? 'result-win' : 'result-lose');
-  const w = specterWins ? specterSnake : leviathanSnake;
-  document.getElementById('result-stats').innerHTML =
-    `<div>Hits Landed</div><span>${w.hits}</span>` +
-    `<div>Damage Dealt</div><span>${w.dmgDealt}</span>` +
-    `<div>Match Time</div><span>${elapsed}s</span>` +
-    `<div>Winner HP Left</div><span>${Math.max(0, w.hp)}</span>`;
+};
+
+// Tail Removal snake (simpler than Snake class — no HP, just length)
+class TRSnake {
+  constructor(cfg,x,y,angle,isBot){
+    this.x=x; this.y=y; this.angle=angle; this.isBot=isBot;
+    this.speed=2.3; this.turnSpeed=cfg.turnSpeed||0.07;
+    this.color=isBot?'#f0a':'#0ff'; this.glow=isBot?'#f04':'#0af';
+    this.length=TR_INIT_LENGTH;
+    this.segments=[];
+    this.wallSlowTimer=0;
+    this.alive=true;
+    this.foodEaten=0;
+    for(let i=0;i<TR_INIT_LENGTH;i++)
+      this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE, y:y-Math.sin(angle)*i*SEGMENT_SIZE});
+  }
+  turn(dir){ this.angle+=dir*(this.turnSpeed||0.07); }
+  setLength(n){
+    this.length=Math.max(1,n);
+    // trim or extend segments
+    while(this.segments.length>this.length) this.segments.pop();
+    while(this.segments.length<this.length){
+      const last=this.segments[this.segments.length-1];
+      const prev=this.segments[this.segments.length-2]||last;
+      this.segments.push({x:last.x+(last.x-prev.x),y:last.y+(last.y-prev.y)});
+    }
+  }
+  update(){
+    if(!this.alive) return;
+    let spd=this.speed;
+    if(this.wallSlowTimer>0){ spd*=0.4; this.wallSlowTimer--; }
+    let nx=this.x+Math.cos(this.angle)*spd;
+    let ny=this.y+Math.sin(this.angle)*spd;
+    const dist=Math.hypot(nx-CX,ny-CY);
+    if(dist>RADIUS-SEGMENT_SIZE){
+      const pushAngle=Math.atan2(CY-ny,CX-nx);
+      this.angle=pushAngle+(Math.random()-.5)*0.4;
+      nx=this.x+Math.cos(this.angle)*spd;
+      ny=this.y+Math.sin(this.angle)*spd;
+      this.wallSlowTimer=25;
+    }
+    this.x=nx; this.y=ny;
+    this.segments.unshift({x:this.x,y:this.y});
+    while(this.segments.length>this.length) this.segments.pop();
+  }
+  draw(){
+    if(!this.alive) return;
+    ctx.save(); ctx.shadowColor=this.glow; ctx.shadowBlur=14;
+    for(let i=this.segments.length-1;i>=0;i--){
+      const s=this.segments[i];
+      const t=1-i/this.segments.length;
+      const r=SEGMENT_SIZE*(0.45+t*0.65);
+      ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
+      ctx.fillStyle=i===0?this.color:`rgba(${hexToRgb(this.color)},${t*.8})`;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// Food item
+class TRFood {
+  constructor(x,y,type){ // type: 'red' or 'green'
+    this.x=x; this.y=y; this.type=type;
+    this.r=10;
+    this.spawnTime=Date.now();
+    this.alive=true;
+  }
+  draw(remaining){ // remaining 0..1
+    ctx.save();
+    const color=this.type==='red'?'#f44':'#4f4';
+    const glow=this.type==='red'?'#f00':'#0f0';
+    ctx.shadowColor=glow; ctx.shadowBlur=16;
+    // pulsing ring countdown
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r+4*(1-remaining),0,Math.PI*2);
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.globalAlpha=0.4+remaining*0.4; ctx.stroke();
+    ctx.globalAlpha=1;
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    ctx.fillStyle=color; ctx.fill();
+    // label
+    ctx.fillStyle='#fff'; ctx.font='bold 10px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(this.type==='red'?'−':'＋',this.x,this.y);
+    ctx.restore();
+  }
+}
+
+// Tail Removal state
+let trSnake1=null, trSnake2=null;
+let trFoods=[];           // active food items (max 2 — one per snake)
+let trActive=false;
+let trStartTime=0;
+let trAnimFrame=null;
+let trDiff='easy';
+let trP1Type='small';
+let trInputDir={x:0,y:0};
+
+// Bot state for TR
+const trBot={
+  actionFrame:0,
+  lastDecisionFrame:0,
+  targetFood:null,      // food the bot is pursuing
+  reactionDelay:0,      // ms countdown before bot reacts to new food
+  lastFoodSeen:null
+};
+
+function trSetDiff(d,btn){
+  trDiff=d;
+  document.querySelectorAll('#screen-tr-select .diff-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function trSelectSnake(t){
+  trP1Type=t;
+  document.getElementById('tr-card-small').classList.toggle('selected',t==='small');
+  document.getElementById('tr-card-big').classList.toggle('selected',t==='big');
+  document.getElementById('tr-btn-start').classList.remove('hidden');
+}
+
+function startTailRemoval(){
+  showScreen('screen-tr-game');
+  const botType=trP1Type==='small'?'big':'small';
+  document.getElementById('tr-p1-name').textContent=trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
+  document.getElementById('tr-p2-name').textContent=trP1Type==='small'?'🤖 LEVIATHAN BOT':'🤖 SPECTER BOT';
+
+  const dc=TR_DIFF[trDiff];
+  const r=RADIUS*0.6;
+  const a1=-Math.PI/2, a2=Math.PI/2;
+  trSnake1=new TRSnake({turnSpeed:0.07}, CX+Math.cos(a1)*r, CY+Math.sin(a1)*r, a2+.3, false);
+  trSnake2=new TRSnake({turnSpeed:dc.turnSpeed}, CX+Math.cos(a2)*r, CY+Math.sin(a2)*r, a1-.3, true);
+  trSnake1.color=trP1Type==='small'?'#0ff':'#f0a';
+  trSnake1.glow=trP1Type==='small'?'#0af':'#f04';
+  trSnake2.color=botType==='small'?'#0ff':'#f0a';
+  trSnake2.glow=botType==='small'?'#0af':'#f04';
+
+  trFoods=[]; trActive=true; trStartTime=Date.now();
+  trBot.actionFrame=0; trBot.lastDecisionFrame=0; trBot.targetFood=null; trBot.reactionDelay=0; trBot.lastFoodSeen=null;
+  particles=[];
+  initBgParticles();
+
+  const isMobile='ontouchstart' in window;
+  document.getElementById('tr-joystick-left').classList.toggle('hidden',!isMobile);
+  if(isMobile) setupTRJoystick();
+
+  // spawn first foods
+  spawnTRFood(trSnake1,'p1');
+  spawnTRFood(trSnake2,'bot');
+
+  updateTRHud();
+  if(trAnimFrame) cancelAnimationFrame(trAnimFrame);
+  trGameLoop();
+}
+
+function spawnTRFood(snake,owner){
+  // Spawn food ahead of snake in its movement direction, within arena
+  const ahead=TR_FOOD_AHEAD_DIST + Math.random()*60;
+  let fx=snake.x+Math.cos(snake.angle)*ahead;
+  let fy=snake.y+Math.sin(snake.angle)*ahead;
+  // Add slight perpendicular offset for variety
+  const perp=snake.angle+Math.PI/2*(Math.random()<0.5?1:-1);
+  fx+=Math.cos(perp)*(Math.random()*40);
+  fy+=Math.sin(perp)*(Math.random()*40);
+  // Clamp inside arena
+  const d=Math.hypot(fx-CX,fy-CY);
+  if(d>RADIUS*0.88){ const a=Math.atan2(fy-CY,fx-CX); fx=CX+Math.cos(a)*(RADIUS*0.82); fy=CY+Math.sin(a)*(RADIUS*0.82); }
+  // Red = shrink (good for player to get), Green = grow (bad)
+  const foodType=Math.random()<0.6?'red':'green';
+  const f=new TRFood(fx,fy,foodType);
+  f.owner=owner; // which snake this food is for
+  trFoods.push(f);
+}
+
+function trGameLoop(){
+  if(!trActive) return;
+  const now=Date.now();
+  updateShake();
+  ctx.save(); ctx.translate(shakeX,shakeY);
+  ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
+  drawArena();
+
+  // Handle TR input for player
+  trHandleInput();
+
+  // Bot AI
+  trBotThink(now);
+
+  // Update snakes
+  trSnake1.update(); trSnake2.update();
+
+  // Check food collisions
+  trCheckFoodCollision(now);
+
+  // Expire old foods and spawn new
+  trManageFoods(now);
+
+  updateParticles();
+  trSnake1.draw(); trSnake2.draw();
+  trFoods.forEach(f=>{ if(f.alive){ const rem=Math.max(0,1-(now-f.spawnTime)/TR_FOOD_LIFETIME); f.draw(rem); }});
+  drawParticles();
+  ctx.restore();
+
+  // Update food timer ring (for player's food)
+  const pf=trFoods.find(f=>f.owner==='p1'&&f.alive);
+  if(pf){
+    const rem=Math.max(0,1-(now-pf.spawnTime)/TR_FOOD_LIFETIME);
+    const circ=2*Math.PI*18;
+    document.getElementById('food-timer-arc').setAttribute('stroke-dashoffset',(1-rem)*circ);
+    document.getElementById('food-timer-arc').setAttribute('stroke',pf.type==='red'?'#f44':'#4f4');
+    document.getElementById('food-timer-label').textContent=(rem*2).toFixed(1)+'s';
+    document.getElementById('food-timer-label').style.color=pf.type==='red'?'#f44':'#4f4';
+  }
+
+  updateTRHud();
+
+  // Win check
+  if(trSnake1.length<=1||trSnake2.length<=1){
+    ctx.restore&&null;
+    endTRGame();
+    return;
+  }
+  trAnimFrame=requestAnimationFrame(trGameLoop);
+}
+
+function trHandleInput(){
+  if(keys['a']||keys['A']) trSnake1.turn(-1);
+  if(keys['d']||keys['D']) trSnake1.turn(1);
+  if(trInputDir.x!==0||trInputDir.y!==0){
+    const ta=Math.atan2(trInputDir.y,trInputDir.x);
+    let da=ta-trSnake1.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    trSnake1.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
+  }
+}
+
+function trBotThink(now){
+  const dc=TR_DIFF[trDiff];
+  trBot.actionFrame++;
+  const head=trSnake2.segments[0];
+  const wallDist=RADIUS-Math.hypot(head.x-CX,head.y-CY);
+
+  // Get bot's food
+  const botFood=trFoods.find(f=>f.owner==='bot'&&f.alive);
+
+  // Reaction delay: bot waits before reacting to new food
+  if(botFood&&botFood!==trBot.lastFoodSeen){
+    trBot.lastFoodSeen=botFood;
+    trBot.reactionDelay=now+dc.reactionMs;
+    trBot.targetFood=null;
+  }
+
+  // Decide whether to pursue food or avoid it
+  if(botFood&&now>=trBot.reactionDelay){
+    if(trBot.targetFood===null){
+      // Decision: go for it or avoid?
+      let shouldPursue;
+      if(botFood.type==='red'){
+        shouldPursue=Math.random()<dc.goodFoodChance; // want red
+      } else {
+        shouldPursue=Math.random()<dc.wrongFoodChance; // avoid green, but sometimes mistakes
+      }
+      trBot.targetFood=shouldPursue?botFood:null;
+    }
+  }
+
+  // Decide every N frames
+  const di=dc.decisionInterval;
+  if(trBot.actionFrame-trBot.lastDecisionFrame<di){
+    trBotExecuteMove(botFood,wallDist,dc);
+    return;
+  }
+  trBot.lastDecisionFrame=trBot.actionFrame;
+  // Re-evaluate target
+  if(botFood){
+    let shouldPursue;
+    if(botFood.type==='red') shouldPursue=Math.random()<dc.goodFoodChance;
+    else shouldPursue=Math.random()<dc.wrongFoodChance;
+    trBot.targetFood=shouldPursue?botFood:null;
+  }
+}
+
+function trBotExecuteMove(botFood,wallDist,dc){
+  const head=trSnake2.segments[0];
+  // Wall avoidance
+  if(wallDist<RADIUS*0.18){
+    const ca=Math.atan2(CY-head.y,CX-head.x);
+    let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    trSnake2.turn(Math.sign(da)*1.0); return;
+  }
+  if(trBot.targetFood&&trBot.targetFood.alive){
+    // Move toward target food
+    const ax=trBot.targetFood.x, ay=trBot.targetFood.y;
+    const a=Math.atan2(ay-head.y,ax-head.x);
+    let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    const noise=trDiff==='hard'?0.04:trDiff==='medium'?0.15:0.4;
+    trSnake2.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(1.2,Math.abs(da)*1.5));
+  } else if(botFood&&botFood.alive){
+    // Avoiding food — steer away
+    const ax=botFood.x, ay=botFood.y;
+    const awayA=Math.atan2(head.y-ay,head.x-ax);
+    let da=awayA-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    trSnake2.turn(Math.sign(da)*0.7);
+  } else {
+    // Wander toward center loosely
+    const a=Math.atan2(CY-head.y,CX-head.x);
+    let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    if(Math.random()<0.4) trSnake2.turn(Math.sign(da)*0.5);
+  }
+}
+
+function trCheckFoodCollision(now){
+  const dc=TR_DIFF[trDiff];
+  trFoods.forEach(f=>{
+    if(!f.alive) return;
+    const snake=f.owner==='p1'?trSnake1:trSnake2;
+    const head=snake.segments[0];
+    if(Math.hypot(head.x-f.x,head.y-f.y)<SEGMENT_SIZE+f.r){
+      // eaten
+      f.alive=false;
+      let delta;
+      if(f.owner==='p1'){
+        // Player always gets standard effects
+        delta=f.type==='red'?-2:3;
+      } else {
+        // Bot gets diff-scaled effects
+        delta=f.type==='red'?dc.redEffect:dc.greenEffect;
+      }
+      const newLen=snake.length+delta;
+      snake.setLength(newLen);
+      snake.foodEaten++;
+      addParticles(f.x,f.y,f.type==='red'?'#f44':'#4f4',16);
+      triggerShake();
+      // spawn new food for that owner after slight delay
+      setTimeout(()=>{ if(trActive) spawnTRFood(snake,f.owner); },300);
+    }
+  });
+  trFoods=trFoods.filter(f=>f.alive);
+}
+
+function trManageFoods(now){
+  trFoods.forEach(f=>{
+    if(!f.alive) return;
+    if(now-f.spawnTime>TR_FOOD_LIFETIME){
+      f.alive=false;
+      const snake=f.owner==='p1'?trSnake1:trSnake2;
+      spawnTRFood(snake,f.owner);
+    }
+  });
+  trFoods=trFoods.filter(f=>f.alive);
+}
+
+function updateTRHud(){
+  document.getElementById('tr-p1-len').textContent=trSnake1?trSnake1.length:TR_INIT_LENGTH;
+  document.getElementById('tr-p2-len').textContent=trSnake2?trSnake2.length:TR_INIT_LENGTH;
+  // Draw segment pips
+  const renderPips=(id,n,cls)=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.innerHTML='';
+    const show=Math.min(n,20);
+    for(let i=0;i<show;i++){
+      const d=document.createElement('div');
+      d.className='tr-seg '+cls;
+      el.appendChild(d);
+    }
+  };
+  renderPips('tr-p1-segs',trSnake1?trSnake1.length:TR_INIT_LENGTH,'p1');
+  renderPips('tr-p2-segs',trSnake2?trSnake2.length:TR_INIT_LENGTH,'p2');
+}
+
+function endTRGame(){
+  cancelAnimationFrame(trAnimFrame); trActive=false;
+  const p1Len=trSnake1.length, p2Len=trSnake2.length;
+  let playerWins;
+  if(p1Len<=1&&p2Len>1) playerWins=true;
+  else if(p2Len<=1&&p1Len>1) playerWins=false;
+  else playerWins=p1Len<=p2Len; // both reached 1 or tie
+  const elapsed=Math.round((Date.now()-trStartTime)/1000);
+  const pName=trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
+  const bName=trP1Type==='small'?'LEVIATHAN BOT':'SPECTER BOT';
+  const winnerLabel=playerWins?pName+' WINS!':'🤖 '+bName+' WINS!';
+  showResultScreen(winnerLabel,playerWins,
+    `<div>Your Final Length</div><span>${p1Len}</span><div>Bot Final Length</div><span>${p2Len}</span><div>Match Time</div><span>${elapsed}s</span><div>Food Eaten</div><span>${trSnake1.foodEaten}</span>`,
+    'tailremoval');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SHARED RESULT SCREEN
+// ═══════════════════════════════════════════════════════════════
+let lastGameMode='predator';
+function showResultScreen(label,playerWon,statsHtml,mode){
+  lastGameMode=mode;
+  const titleEl=document.getElementById('result-title');
+  titleEl.textContent=label;
+  titleEl.className='result-title '+(playerWon?'result-win':'result-lose');
+  document.getElementById('result-stats').innerHTML=statsHtml;
+  document.getElementById('btn-play-again').textContent='▶ PLAY AGAIN';
+  document.getElementById('btn-change').textContent=mode==='tailremoval'?'CHANGE SNAKE':'CHANGE SNAKE';
   showScreen('screen-result');
 }
-
-// ─── JOYSTICKS ────────────────────────────────────────────────────────────────
-function setupJoysticks() {
-  setupJoy('joy-outer-l', 'joy-inner-l', inputDir1);
-  if (gameMode === 'local') setupJoy('joy-outer-r', 'joy-inner-r', inputDir2);
+function handlePlayAgain(){
+  if(lastGameMode==='tailremoval') startTailRemoval();
+  else restartGame();
 }
-function setupJoy(outId, innId, dir) {
-  const outer = document.getElementById(outId);
-  const inner = document.getElementById(innId);
-  let active = false, tid = -1;
-  outer.parentElement.addEventListener('touchstart', e => {
-    active = true; tid = e.changedTouches[0].identifier;
-  }, { passive: true });
-  document.addEventListener('touchmove', e => {
-    if (!active) return;
-    for (const t of e.changedTouches) {
-      if (t.identifier !== tid) continue;
-      const rect = outer.getBoundingClientRect();
-      const dx = t.clientX - (rect.left + rect.width/2);
-      const dy = t.clientY - (rect.top  + rect.height/2);
-      const d = Math.hypot(dx, dy) || 0.01;
-      const max = rect.width/2 - 8;
-      const cx = Math.min(d, max) * dx / d;
-      const cy = Math.min(d, max) * dy / d;
-      inner.style.transform = `translate(calc(-50% + ${cx}px),calc(-50% + ${cy}px))`;
-      dir.x = dx / d; dir.y = dy / d;
-      break;
+function handleChange(){
+  if(lastGameMode==='tailremoval') showScreen('screen-tr-select');
+  else showScreen('screen-snake-select');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// JOYSTICKS
+// ═══════════════════════════════════════════════════════════════
+function setupJoysticks(){
+  setupJoy('joy-outer-l','joy-inner-l',inputDir1);
+  if(gameMode==='local') setupJoy('joy-outer-r','joy-inner-r',inputDir2);
+}
+function setupTRJoystick(){ setupJoy('tr-joy-outer-l','tr-joy-inner-l',trInputDir); }
+function setupJoy(outId,innId,dir){
+  const outer=document.getElementById(outId);
+  const inner=document.getElementById(innId);
+  if(!outer||!inner) return;
+  let active=false, tid=-1;
+  outer.parentElement.addEventListener('touchstart',e=>{ active=true; tid=e.changedTouches[0].identifier; },{passive:true});
+  document.addEventListener('touchmove',e=>{
+    if(!active) return;
+    for(const t of e.changedTouches){
+      if(t.identifier!==tid) continue;
+      const rect=outer.getBoundingClientRect();
+      const dx=t.clientX-(rect.left+rect.width/2);
+      const dy=t.clientY-(rect.top+rect.height/2);
+      const d=Math.hypot(dx,dy)||0.01;
+      const max=rect.width/2-8;
+      const cx=Math.min(d,max)*dx/d, cy=Math.min(d,max)*dy/d;
+      inner.style.transform=`translate(calc(-50% + ${cx}px),calc(-50% + ${cy}px))`;
+      dir.x=dx/d; dir.y=dy/d; break;
     }
-  }, { passive: true });
-  document.addEventListener('touchend', e => {
-    for (const t of e.changedTouches) {
-      if (t.identifier !== tid) continue;
-      active = false; dir.x = 0; dir.y = 0;
-      inner.style.transform = 'translate(-50%,-50%)';
-      break;
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier!==tid) continue;
+      active=false; dir.x=0; dir.y=0;
+      inner.style.transform='translate(-50%,-50%)'; break;
     }
   });
 }
 
-// ─── BACKGROUND LOOP ──────────────────────────────────────────────────────────
-function drawBg() {
-  bgCtx.fillStyle = '#060914'; bgCtx.fillRect(0, 0, W, H);
-  bgParticles.forEach(p => {
-    p.x += p.vx; p.y += p.vy;
-    if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-    if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-    bgCtx.save(); bgCtx.globalAlpha = p.a;
-    bgCtx.beginPath(); bgCtx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-    bgCtx.fillStyle = '#0af'; bgCtx.fill(); bgCtx.restore();
+// ═══════════════════════════════════════════════════════════════
+// BACKGROUND
+// ═══════════════════════════════════════════════════════════════
+function drawBg(){
+  bgCtx.fillStyle='#060914'; bgCtx.fillRect(0,0,W,H);
+  bgParticles.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0) p.x=W; if(p.x>W) p.x=0;
+    if(p.y<0) p.y=H; if(p.y>H) p.y=0;
+    bgCtx.save(); bgCtx.globalAlpha=p.a;
+    bgCtx.beginPath(); bgCtx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    bgCtx.fillStyle='#0af'; bgCtx.fill(); bgCtx.restore();
   });
-  const t = Date.now() / 1000;
-  for (let i = 0; i < 3; i++) {
-    const r = 80 + i*60 + Math.sin(t*.5+i)*20;
-    bgCtx.save(); bgCtx.globalAlpha = .03 + Math.sin(t*.3+i)*.01;
-    bgCtx.beginPath(); bgCtx.arc(CX, CY, r, 0, Math.PI*2);
-    bgCtx.strokeStyle = '#0af'; bgCtx.lineWidth = 1; bgCtx.stroke();
-    bgCtx.restore();
+  const t=Date.now()/1000;
+  for(let i=0;i<3;i++){
+    const r=80+i*60+Math.sin(t*.5+i)*20;
+    bgCtx.save(); bgCtx.globalAlpha=.03+Math.sin(t*.3+i)*.01;
+    bgCtx.beginPath(); bgCtx.arc(CX,CY,r,0,Math.PI*2);
+    bgCtx.strokeStyle='#0af'; bgCtx.lineWidth=1; bgCtx.stroke(); bgCtx.restore();
   }
 }
-
 initBgParticles();
 (function bgLoop(){ drawBg(); requestAnimationFrame(bgLoop); })();
 </script>
