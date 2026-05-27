@@ -128,16 +128,18 @@ canvas{display:block;position:absolute;top:0;left:0}
 
   <div id="screen-game" class="screen hidden" style="pointer-events:none">
     <div class="hbar-wrap" style="pointer-events:none">
+      <!-- LEFT bar = always SWIFT -->
       <div class="hbar-box">
-        <div class="hbar-label p1" id="p1-name">PLAYER 1</div>
-        <div class="hbar-bg"><div class="hbar-fill p1" id="hp-bar-1" style="width:100%"></div></div>
-        <div class="hbar-hp p1" id="hp-text-1">15</div>
+        <div class="hbar-label p1" id="swift-name">⚡ SWIFT</div>
+        <div class="hbar-bg"><div class="hbar-fill p1" id="hp-bar-swift" style="width:100%"></div></div>
+        <div class="hbar-hp p1" id="hp-text-swift">15</div>
       </div>
       <div id="arena-label">◉ ARENA</div>
+      <!-- RIGHT bar = always TITAN -->
       <div class="hbar-box" style="align-items:flex-end">
-        <div class="hbar-label p2" id="p2-name">PLAYER 2</div>
-        <div class="hbar-bg"><div class="hbar-fill p2" id="hp-bar-2" style="width:100%"></div></div>
-        <div class="hbar-hp p2" id="hp-text-2">15</div>
+        <div class="hbar-label p2" id="titan-name">💥 TITAN</div>
+        <div class="hbar-bg"><div class="hbar-fill p2" id="hp-bar-titan" style="width:100%"></div></div>
+        <div class="hbar-hp p2" id="hp-text-titan">15</div>
       </div>
     </div>
     <div id="joystick-left" class="joystick-zone left hidden">
@@ -435,7 +437,10 @@ function updateShake() {
   }
 }
 
-let snake1, snake2, gameActive = false, keys = {};
+// snake1 = P1's snake, snake2 = P2's/Bot's snake
+// swiftSnake and titanSnake are references used for HP bar display
+let snake1, snake2, swiftSnake, titanSnake;
+let gameActive = false, keys = {};
 let finalSlowMo = false, finalSlowMoFrames = 0;
 let gameStartTime;
 let inputDir1 = { x: 0, y: 0 }, inputDir2 = { x: 0, y: 0 };
@@ -453,12 +458,37 @@ function initPositions() {
   const cfg1 = SNAKE_CONFIGS[p1Snake], cfg2 = SNAKE_CONFIGS[p2Snake];
   snake1 = new Snake(cfg1, CX + Math.cos(a1) * r, CY + Math.sin(a1) * r, a2 + .3, false);
   snake2 = new Snake(cfg2, CX + Math.cos(a2) * r, CY + Math.sin(a2) * r, a1 - .3, true);
+
+  // Assign swiftSnake and titanSnake based on who picked which
+  if (p1Snake === 'small') {
+    swiftSnake = snake1;
+    titanSnake = snake2;
+  } else {
+    swiftSnake = snake2;
+    titanSnake = snake1;
+  }
 }
 
 function startGame() {
   showScreen('screen-game');
-  document.getElementById('p1-name').textContent = p1Snake === 'small' ? '⚡ SWIFT' : '💥 TITAN';
-  document.getElementById('p2-name').textContent = gameMode === 'bot' ? '🤖 BOT' : (p2Snake === 'small' ? '⚡ SWIFT' : '💥 TITAN');
+
+  // ── FIX: Label each bar based on which snake type the bot is actually playing ──
+  if (gameMode === 'bot') {
+    // p2Snake is always the bot's snake (opposite of player's pick)
+    if (p2Snake === 'small') {
+      // Bot is playing Swift (left bar), Player is playing Titan (right bar)
+      document.getElementById('swift-name').textContent = '🤖 SWIFT BOT';
+      document.getElementById('titan-name').textContent = '💥 TITAN';
+    } else {
+      // Bot is playing Titan (right bar), Player is playing Swift (left bar)
+      document.getElementById('swift-name').textContent = '⚡ SWIFT';
+      document.getElementById('titan-name').textContent = '🤖 TITAN BOT';
+    }
+  } else {
+    document.getElementById('swift-name').textContent = '⚡ SWIFT';
+    document.getElementById('titan-name').textContent = '💥 TITAN';
+  }
+
   initPositions(); initBgParticles();
   gameActive = true; particles = []; finalSlowMo = false; finalSlowMoFrames = 0;
   gameStartTime = Date.now();
@@ -477,13 +507,17 @@ function restartGame() {
   gameStartTime = Date.now(); updateHpBars(); gameLoop();
 }
 
+// HP bars always track the correct snake by TYPE
 function updateHpBars() {
-  const pct1 = Math.max(0, snake1.hp / snake1.maxHp) * 100;
-  const pct2 = Math.max(0, snake2.hp / snake2.maxHp) * 100;
-  document.getElementById('hp-bar-1').style.width = pct1 + '%';
-  document.getElementById('hp-bar-2').style.width = pct2 + '%';
-  document.getElementById('hp-text-1').textContent = Math.max(0, snake1.hp);
-  document.getElementById('hp-text-2').textContent = Math.max(0, snake2.hp);
+  // Swift HP → left cyan bar
+  const swiftPct = Math.max(0, swiftSnake.hp / swiftSnake.maxHp) * 100;
+  document.getElementById('hp-bar-swift').style.width = swiftPct + '%';
+  document.getElementById('hp-text-swift').textContent = Math.max(0, swiftSnake.hp);
+
+  // Titan HP → right pink bar
+  const titanPct = Math.max(0, titanSnake.hp / titanSnake.maxHp) * 100;
+  document.getElementById('hp-bar-titan').style.width = titanPct + '%';
+  document.getElementById('hp-text-titan').textContent = Math.max(0, titanSnake.hp);
 }
 
 function checkHit(attacker, defender) {
@@ -508,7 +542,6 @@ function botThink() {
   if (!gameActive || !snake2.alive) return;
   const head = snake2.segments[0];
   const dx = snake1.x - head.x, dy = snake1.y - head.y;
-  const dist = Math.hypot(dx, dy);
   const angleToTarget = Math.atan2(dy, dx);
   let da = angleToTarget - snake2.angle;
   while (da > Math.PI) da -= Math.PI * 2;
@@ -599,13 +632,25 @@ function drawArena() {
 
 function endGame() {
   cancelAnimationFrame(animFrame); gameActive = false;
-  const p1wins = snake2.hp <= 0;
+  // Determine winner by checking who has HP left
+  const swiftWins = titanSnake.hp <= 0;
   const elapsed = Math.round((Date.now() - gameStartTime) / 1000);
-  const winner = p1wins ? (p1Snake === 'small' ? '⚡ SWIFT' : '💥 TITAN') : (gameMode === 'bot' ? '🤖 BOT' : (p2Snake === 'small' ? '⚡ SWIFT' : '💥 TITAN'));
+
+  let winnerLabel;
+  if (gameMode === 'bot') {
+    if (swiftWins) {
+      winnerLabel = p1Snake === 'small' ? '⚡ SWIFT WINS!' : '🤖 SWIFT BOT WINS!';
+    } else {
+      winnerLabel = p1Snake === 'big' ? '💥 TITAN WINS!' : '🤖 TITAN BOT WINS!';
+    }
+  } else {
+    winnerLabel = swiftWins ? '⚡ SWIFT WINS!' : '💥 TITAN WINS!';
+  }
+
   const t = document.getElementById('result-title');
-  t.textContent = winner + ' WINS!';
-  t.className = 'result-title ' + (p1wins ? 'result-win' : 'result-lose');
-  const w = p1wins ? snake1 : snake2;
+  t.textContent = winnerLabel;
+  t.className = 'result-title ' + (swiftWins ? 'result-win' : 'result-lose');
+  const w = swiftWins ? swiftSnake : titanSnake;
   document.getElementById('result-stats').innerHTML =
     `<div>Hits Landed</div><span>${w.hits}</span><div>Damage Dealt</div><span>${w.dmgDealt}</span><div>Match Time</div><span>${elapsed}s</span><div>Winner HP Left</div><span>${Math.max(0, w.hp)}</span>`;
   showScreen('screen-result');
