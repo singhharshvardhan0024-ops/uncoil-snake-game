@@ -144,8 +144,8 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">SHRINK TO WIN</div>
     <div style="color:#8af;font-size:12px;letter-spacing:2px;margin:8px 0 0;max-width:360px;text-align:center">Collect shrink food, dodge gravity zones, outrace rival snakes</div>
     <div class="menu-group">
-      <button class="btn" onclick="showScreen('screen-stw-game'); startShrinkToWin('bot')">🤖 PLAY WITH BOT</button>
-      <button class="btn" onclick="showScreen('screen-stw-game'); startShrinkToWin('self')">🧘 PLAY WITH SELF</button>
+      <button class="btn" onclick="setupSTWSelect('bot')">🤖 PLAY WITH BOT</button>
+      <button class="btn" onclick="setupSTWSelect('self')">🧘 PLAY WITH SELF</button>
       <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
     </div>
   </div>
@@ -209,6 +209,26 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div style="margin-top:16px;display:flex;gap:12px">
       <button class="btn btn-green hidden" id="btn-start-game" onclick="startGame()">▶ FIGHT!</button>
       <button class="btn btn-red" onclick="showScreen('screen-predator-modes')">← BACK</button>
+    </div>
+  </div>
+
+  <div id="screen-stw-select" class="screen hidden">
+    <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">SHRINK TO WIN</div>
+    <div class="mode-badge mode3" id="stw-select-badge">MODE 3 · BOT</div>
+    <div class="section-title">Choose your serpent</div>
+    <div class="mode-row">
+      <div class="snake-card" id="stw-card-small" onclick="stwSelectSnake('small')">
+        <h3>⚡ SPECTER</h3>
+        <div style="font-size:11px;color:#0af;margin-top:6px">Cyan · Agile</div>
+      </div>
+      <div class="snake-card" id="stw-card-big" onclick="stwSelectSnake('big')">
+        <h3>💥 LEVIATHAN</h3>
+        <div style="font-size:11px;color:#0af;margin-top:6px">Pink · Resilient</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px">
+      <button class="btn btn-green hidden" id="stw-btn-start" onclick="confirmStartSTW()">▶ START!</button>
+      <button class="btn btn-red" onclick="showScreen('screen-stw-modes')">← BACK</button>
     </div>
   </div>
 
@@ -1264,7 +1284,8 @@ class RivalSnake extends STWSnake {
     const r=STW_RADIUS*0.5+Math.random()*STW_RADIUS*0.3;
     const x=CX+Math.cos(angle)*r;
     const y=CY+Math.sin(angle)*r;
-    super(x,y,Math.random()*Math.PI*2,'#f0a','#f04');
+    // Orange generic color for STW rivals
+    super(x,y,Math.random()*Math.PI*2,'#ff6b35','#ff3300');
     this.speed=2.0; this.turnSpeed=0.065;
     this.spawnTime=Date.now();
     this.targetFood=null;
@@ -1308,6 +1329,7 @@ class RivalSnake extends STWSnake {
 }
 
 let stwActive=false, stwMode='bot';
+let stwSelectedSnake=null, stwPendingMode=null;
 let stwPlayerSnake=null, stwBotSnake=null;
 let stwFoods=[];
 let stwGravityZones=[];
@@ -1322,11 +1344,31 @@ let stwBotActionFrame=0, stwBotLastDecision=0, stwBotTargetFood=null;
 let stwHurdleState = 'wait_gravity';
 let stwHurdleTimer = 0;
 
+function setupSTWSelect(m){
+  stwPendingMode = m;
+  document.getElementById('stw-select-badge').textContent = m === 'bot' ? 'MODE 3 · BOT' : 'MODE 3 · SELF';
+  stwSelectedSnake = null;
+  document.getElementById('stw-card-small').classList.remove('selected');
+  document.getElementById('stw-card-big').classList.remove('selected');
+  document.getElementById('stw-btn-start').classList.add('hidden');
+  showScreen('screen-stw-select');
+}
+function stwSelectSnake(t){
+  stwSelectedSnake = t;
+  document.getElementById('stw-card-small').classList.toggle('selected', t === 'small');
+  document.getElementById('stw-card-big').classList.toggle('selected', t === 'big');
+  document.getElementById('stw-btn-start').classList.remove('hidden');
+}
+function confirmStartSTW(){
+  showScreen('screen-stw-game');
+  startShrinkToWin(stwPendingMode, stwSelectedSnake);
+}
+
 function isInsideGravityZone(x,y){
   return stwGravityZones.some(gz=>gz.alive&&Math.hypot(x-gz.x,y-gz.y)<gz.r+20);
 }
 
-function startShrinkToWin(mode){
+function startShrinkToWin(mode, pType){
   STW_RADIUS = Math.min(W,H)*0.88;
   stwMode=mode; stwActive=true;
   stwFoods=[]; stwGravityZones=[]; stwRivals=[]; particles=[];
@@ -1335,14 +1377,25 @@ function startShrinkToWin(mode){
   initBgParticles();
 
   const pa=Math.random()*Math.PI*2;
-  stwPlayerSnake=new STWSnake(CX+Math.cos(pa)*STW_RADIUS*0.4, CY+Math.sin(pa)*STW_RADIUS*0.4, pa+Math.PI,'#0ff','#0af', STW_PLAYER_INIT_LENGTH);
+  const pCfg = pType === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'};
+  stwPlayerSnake=new STWSnake(CX+Math.cos(pa)*STW_RADIUS*0.4, CY+Math.sin(pa)*STW_RADIUS*0.4, pa+Math.PI, pCfg.c, pCfg.g, STW_PLAYER_INIT_LENGTH);
+
+  const rivalLenEl = document.getElementById('stw-rival-len');
+  const rivalCountEl = document.getElementById('stw-rival-count');
 
   if(stwMode==='bot'){
     const ba=pa+Math.PI;
-    stwBotSnake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI,'#ff6b35','#ff3300', STW_PLAYER_INIT_LENGTH);
+    const bCfg = pType === 'small' ? {c:'#f0a',g:'#f04'} : {c:'#0ff',g:'#0af'};
+    stwBotSnake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
     stwBotSnake.speed=2.2; stwBotSnake.turnSpeed=0.068;
+    rivalLenEl.style.color = bCfg.c;
+    rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`;
+    rivalCountEl.style.color = bCfg.c;
   } else {
     stwBotSnake=null;
+    rivalLenEl.style.color = '#ff6b35';
+    rivalLenEl.style.textShadow = '0 0 12px #ff3300';
+    rivalCountEl.style.color = '#ff3300';
   }
 
   stwCam.x = stwPlayerSnake.x;
@@ -1444,23 +1497,26 @@ function drawMinimap(){
   stwRivals.forEach(rv=>{
     const p=toMm(rv.x,rv.y);
     mctx.beginPath(); mctx.arc(p.x,p.y,3,0,Math.PI*2);
-    mctx.fillStyle='#f0a'; mctx.fill();
+    mctx.fillStyle='#ff6b35'; mctx.fill();
   });
 
   if(stwBotSnake&&stwBotSnake.alive){
     const p=toMm(stwBotSnake.x,stwBotSnake.y);
     mctx.beginPath(); mctx.arc(p.x,p.y,4,0,Math.PI*2);
-    mctx.fillStyle='#ff6b35'; mctx.fill();
+    mctx.fillStyle = stwSelectedSnake === 'small' ? '#f0a' : '#0ff';
+    mctx.fill();
   }
 
   if(stwPlayerSnake){
     const p=toMm(stwPlayerSnake.x,stwPlayerSnake.y);
     mctx.beginPath(); mctx.arc(p.x,p.y,5,0,Math.PI*2);
-    mctx.fillStyle='#0ff'; mctx.fill();
+    mctx.fillStyle = stwSelectedSnake === 'small' ? '#0ff' : '#f0a';
+    mctx.fill();
     const ax=p.x+Math.cos(stwPlayerSnake.angle)*7;
     const ay=p.y+Math.sin(stwPlayerSnake.angle)*7;
     mctx.beginPath(); mctx.moveTo(p.x,p.y); mctx.lineTo(ax,ay);
-    mctx.strokeStyle='#0ff'; mctx.lineWidth=1.5; mctx.stroke();
+    mctx.strokeStyle = stwSelectedSnake === 'small' ? '#0ff' : '#f0a'; 
+    mctx.lineWidth=1.5; mctx.stroke();
   }
 
   mctx.strokeStyle='rgba(0,200,255,0.25)'; mctx.lineWidth=1;
@@ -1539,7 +1595,7 @@ function stwGameLoop(){
       f.alive=false;
       stwPlayerSnake.setLength(stwPlayerSnake.length+STW_FOOD_SHRINK);
       stwPlayerSnake.foodEaten++;
-      addParticles(f.x,f.y,'#0af',14); triggerShake();
+      addParticles(f.x,f.y, stwSelectedSnake === 'small' ? '#0af' : '#f04', 14); triggerShake();
       setTimeout(()=>{ if(stwActive){ stwFoods.push(new STWFood()); }},400);
     }
   });
@@ -1550,7 +1606,7 @@ function stwGameLoop(){
         f.alive=false;
         stwBotSnake.setLength(stwBotSnake.length+STW_FOOD_SHRINK);
         stwBotSnake.foodEaten++;
-        addParticles(f.x,f.y,'#ff6b35',10);
+        addParticles(f.x,f.y, stwSelectedSnake === 'small' ? '#f04' : '#0af', 10);
         setTimeout(()=>{ if(stwActive){ stwFoods.push(new STWFood()); }},400);
       }
     });
@@ -1628,7 +1684,7 @@ function endSTWGame(playerWon){
   if(stwMode==='bot'){
     winnerLabel=playerWon?'🌀 YOU WIN!':'🤖 BOT WINS!';
     winClass=playerWon;
-    statsHtml=`<div>Winner</div><span>${playerWon?'You':'Bot'}</span><div>Match Duration</div><span>${timeStr}</span><div>Final Length</div><span>${stwPlayerSnake.length}</span><div>Shrink Food Collected</div><span>${stwPlayerSnake.foodEaten}</span><div>Gravity Zone Hits</div><span>${stwGravityEncounters}</span><div>Rivals Outperformed</div><span>${stwRivalsOutperformed}</span>`;
+    statsHtml=`<div>Winner</div><span>${playerWon?'You':'Bot'}</span><div>Match Duration</div><span>${timeStr}</span><div>Final Length</div><span>${stwPlayerSnake.length}</span><div>Shrink Food Collected</div><span>${stwPlayerSnake.foodEaten}</span>`;
   } else {
     winnerLabel='🌀 COMPLETE!';
     winClass=true;
@@ -1652,7 +1708,7 @@ function showResultScreen(label,playerWon,statsHtml,mode){
   const btnChange=document.getElementById('btn-change');
   if(mode==='stw'){
     btnChange.textContent='CHANGE MODE';
-    btnChange.onclick=()=>showScreen('screen-stw-modes');
+    btnChange.onclick=()=>showScreen('screen-stw-select');
   } else {
     btnChange.textContent='CHANGE SNAKE';
     btnChange.onclick=handleChange;
@@ -1662,7 +1718,7 @@ function showResultScreen(label,playerWon,statsHtml,mode){
 }
 function handlePlayAgain(){
   if(lastGameMode==='tailremoval') startTailRemoval();
-  else if(lastGameMode==='stw'){ showScreen('screen-stw-game'); startShrinkToWin(stwMode); }
+  else if(lastGameMode==='stw'){ showScreen('screen-stw-game'); startShrinkToWin(stwMode, stwSelectedSnake); }
   else restartGame();
 }
 function handleChange(){
