@@ -62,7 +62,6 @@ canvas{display:block;position:absolute;top:0;left:0}
 .instructions-box p,.instructions-box li{color:#8af;font-size:13px;line-height:1.7;margin:4px 0}
 .instructions-box li{list-style:none;padding-left:12px}
 .instructions-box li::before{content:"▸ ";color:#0af}
-#arena-label{position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:3px;color:#0af4;pointer-events:none}
 #tr-hud{position:absolute;top:12px;left:0;width:100%;display:flex;justify-content:space-between;padding:0 20px;pointer-events:none}
 .tr-box{display:flex;flex-direction:column;align-items:center;min-width:140px}
 .tr-label{font-size:11px;letter-spacing:2px;margin-bottom:4px}
@@ -88,8 +87,7 @@ canvas{display:block;position:absolute;top:0;left:0}
 .stw-label{font-size:11px;letter-spacing:2px;margin-bottom:4px;color:#0af}
 .stw-len{font-size:32px;font-weight:900;line-height:1;color:#0ff;text-shadow:0 0 12px #0af}
 .stw-target{font-size:10px;letter-spacing:2px;color:#0af;margin-top:2px}
-.stw-center{display:flex;flex-direction:column;align-items:center;gap:4px}
-.stw-center-label{font-size:10px;letter-spacing:3px;color:#0af4}
+.stw-center{display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:40px;}
 .stw-timer-badge{font-size:20px;font-weight:700;color:#0ff;text-shadow:0 0 10px #0af}
 .stw-event-label{font-size:10px;letter-spacing:2px;color:#f0a;animation:blink 0.8s infinite}
 .gravity-zone-indicator{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:3px;color:#f0a;pointer-events:none;animation:blink 0.6s infinite}
@@ -100,6 +98,19 @@ canvas{display:block;position:absolute;top:0;left:0}
 <canvas id="bg"></canvas>
 <canvas id="game"></canvas>
 <div id="ui">
+
+  <button id="btn-pause" class="btn hidden" onclick="pauseGame()" style="position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:100; padding:6px 20px; font-size:12px; font-weight:bold; background:rgba(6,9,20,0.85); backdrop-filter:blur(4px); border-radius:4px; box-shadow:0 0 10px #0af4;">⏸ PAUSE</button>
+
+  <div id="screen-pause" class="screen hidden" style="background:rgba(6,9,20,0.92); z-index:200;">
+    <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">PAUSED</div>
+    <div class="menu-group">
+      <button class="btn btn-green" onclick="resumeGame()">▶ RESUME</button>
+      <button class="btn" onclick="showAboutMode()">ABOUT THIS MODE</button>
+      <button class="btn btn-red" onclick="exitToMenu()">EXIT</button>
+    </div>
+    <div id="pause-about-box" class="instructions-box hidden" style="margin-top:24px; border:1px solid #0af; padding:20px; background:#060914; border-radius:4px; max-width:520px; text-align:left;">
+    </div>
+  </div>
 
   <div id="screen-menu" class="screen">
     <div class="neon-title">UNCOIL</div>
@@ -152,7 +163,6 @@ canvas{display:block;position:absolute;top:0;left:0}
 
   <div id="screen-tr-select" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">TAIL REMOVAL</div>
-    <div class="mode-badge mode1" id="tr-mode-badge">MODE 1 · BOT ONLY</div>
     <div class="section-title">Choose your serpent</div>
     <div class="mode-row">
       <div class="snake-card" id="tr-card-small" onclick="trSelectSnake('small')">
@@ -214,7 +224,6 @@ canvas{display:block;position:absolute;top:0;left:0}
 
   <div id="screen-stw-select" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">SHRINK TO WIN</div>
-    <div class="mode-badge mode3" id="stw-select-badge">MODE 3 · BOT</div>
     <div class="section-title">Choose your serpent</div>
     <div class="mode-row">
       <div class="snake-card" id="stw-card-small" onclick="stwSelectSnake('small')">
@@ -246,7 +255,6 @@ canvas{display:block;position:absolute;top:0;left:0}
         <div class="hbar-bg"><div class="hbar-fill p1" id="hp-bar-specter" style="width:100%"></div></div>
         <div class="hbar-hp p1" id="hp-text-specter">15</div>
       </div>
-      <div id="arena-label">◉ PREDATOR ARENA</div>
       <div class="hbar-box" style="align-items:flex-end">
         <div class="hbar-label p2" id="leviathan-name">💥 LEVIATHAN</div>
         <div class="hbar-bg"><div class="hbar-fill p2" id="hp-bar-leviathan" style="width:100%"></div></div>
@@ -268,8 +276,7 @@ canvas{display:block;position:absolute;top:0;left:0}
         <div class="tr-len p1" id="tr-p1-len">20</div>
         <div class="tr-segs" id="tr-p1-segs"></div>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:center">
-        <div style="font-size:10px;letter-spacing:3px;color:#0af4">✂️ TAIL REMOVAL</div>
+      <div style="display:flex;flex-direction:column;align-items:center;margin-top:40px;">
         <div style="font-size:10px;color:#0af;margin-top:2px" id="tr-round-label">ROUND 1</div>
       </div>
       <div class="tr-box" style="align-items:flex-end">
@@ -304,7 +311,6 @@ canvas{display:block;position:absolute;top:0;left:0}
         <div class="stw-target" id="stw-target-label">TARGET: 1</div>
       </div>
       <div class="stw-center">
-        <div class="stw-center-label">🌀 SHRINK TO WIN</div>
         <div class="stw-timer-badge" id="stw-elapsed">0:00</div>
         <div class="stw-event-label hidden" id="stw-event-label">⚡ GRAVITY ZONE!</div>
       </div>
@@ -408,6 +414,9 @@ function toggleSetting(k){
 const GAME_SCREENS = new Set(['screen-game','screen-tr-game','screen-stw-game']);
 
 let currentScreen = 'screen-menu';
+let isPaused = false;
+let pauseStartTime = 0;
+
 function showScreen(id){
   document.getElementById(currentScreen).classList.add('hidden');
   document.getElementById(id).classList.remove('hidden');
@@ -418,12 +427,67 @@ function showScreen(id){
     gameActive  = false;
     trActive    = false;
     stwActive   = false;
+    isPaused    = false;
+    document.getElementById('btn-pause').classList.add('hidden');
     if(animFrame)    { cancelAnimationFrame(animFrame);    animFrame    = null; }
     if(trAnimFrame)  { cancelAnimationFrame(trAnimFrame);  trAnimFrame  = null; }
     if(stwAnimFrame) { cancelAnimationFrame(stwAnimFrame); stwAnimFrame = null; }
     // Clear the game canvas so no ghost frames bleed onto menu/result screens
     ctx.clearRect(0, 0, W, H);
     particles = [];
+  }
+}
+
+function pauseGame() {
+  isPaused = true;
+  pauseStartTime = Date.now();
+  document.getElementById('screen-pause').classList.remove('hidden');
+  document.getElementById('pause-about-box').classList.add('hidden');
+  document.getElementById('btn-pause').classList.add('hidden');
+}
+
+function resumeGame() {
+  const pauseDuration = Date.now() - pauseStartTime;
+  
+  if (gameActive) {
+    gameStartTime += pauseDuration;
+  }
+  if (trActive) {
+    trStartTime += pauseDuration;
+    trFoods.forEach(f => f.spawnTime += pauseDuration);
+    if (trBot.reactionDelay > 0) trBot.reactionDelay += pauseDuration;
+  }
+  if (stwActive) {
+    stwStartTime += pauseDuration;
+    stwHurdleTimer += pauseDuration;
+    if(stwPlayerSnake) stwPlayerSnake.lastTeleportTime += pauseDuration;
+    if(stwBotSnake) stwBotSnake.lastTeleportTime += pauseDuration;
+    stwGravityZones.forEach(gz => gz.spawnTime += pauseDuration);
+    stwRivals.forEach(rv => rv.spawnTime += pauseDuration);
+    stwFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
+  }
+
+  isPaused = false;
+  document.getElementById('screen-pause').classList.add('hidden');
+  document.getElementById('btn-pause').classList.remove('hidden');
+}
+
+function exitToMenu() {
+  isPaused = false;
+  document.getElementById('screen-pause').classList.add('hidden');
+  document.getElementById('btn-pause').classList.add('hidden');
+  showScreen('screen-menu');
+}
+
+function showAboutMode() {
+  const box = document.getElementById('pause-about-box');
+  box.classList.remove('hidden');
+  if (gameActive) {
+    box.innerHTML = `<h2>⚔️ MODE 2 — PREDATOR</h2><p>Fight inside a circular arena. Reduce your opponent's 15 HP to zero to win.</p><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>Hitting the arena wall slows you briefly</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
+  } else if (trActive) {
+    box.innerHTML = `<h2>✂️ MODE 1 — TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−2 length) and avoid green food which grows you (+3 length).</p><li>Food is player-specific: you can only eat your own food and will pass right through your opponent's</li><li>Food spawns ahead of your snake — you have 2 seconds to react</li><li>After 2 seconds food disappears and new food spawns</li><li>First to reach length 1 wins!</li>`;
+  } else if (stwActive) {
+    box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles (Gravity Zones and Rivals) alternate, appearing for 5 seconds followed by a 12-second wait</li><li>Use the minimap (bottom-right) to track the full arena</li>`;
   }
 }
 
@@ -741,6 +805,7 @@ function initPositions(){
 }
 function startGame(){
   showScreen('screen-game');
+  document.getElementById('btn-pause').classList.remove('hidden');
   if(gameMode==='bot'){
     document.getElementById('specter-name').textContent=p2Snake==='small'?'🤖 SPECTER BOT':'⚡ SPECTER';
     document.getElementById('leviathan-name').textContent=p2Snake==='big'?'🤖 LEVIATHAN BOT':'💥 LEVIATHAN';
@@ -761,6 +826,7 @@ function startGame(){
 }
 function restartGame(){
   showScreen('screen-game');
+  document.getElementById('btn-pause').classList.remove('hidden');
   initPositions(); gameActive=true; particles=[];
   finalSlowMo=false; finalSlowMoFrames=0;
   gameStartTime=Date.now(); updateHpBars();
@@ -793,6 +859,7 @@ function checkHit(attacker,defender){
 }
 function gameLoop(){
   if(!gameActive) return;
+  if(isPaused){ animFrame=requestAnimationFrame(gameLoop); return; }
   updateShake();
   ctx.save(); ctx.translate(shakeX,shakeY);
   ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
@@ -844,6 +911,7 @@ function drawArena(){
   }
 }
 function endPredatorGame(){
+  document.getElementById('btn-pause').classList.add('hidden');
   cancelAnimationFrame(animFrame); animFrame=null; gameActive=false;
   const specterWins=leviathanSnake.hp<=0;
   const elapsed=Math.round((Date.now()-gameStartTime)/1000);
@@ -945,7 +1013,6 @@ const trBot={ actionFrame:0, lastDecisionFrame:0, targetFood:null, reactionDelay
 function setupTRMode(m){
   trGameMode=m;
   document.getElementById('tr-diff-section').classList.toggle('hidden',m!=='bot');
-  document.getElementById('tr-mode-badge').textContent=m==='bot'?'MODE 1 · BOT ONLY':'MODE 1 · LOCAL 2P';
   trP1Type=null;
   document.getElementById('tr-card-small').classList.remove('selected');
   document.getElementById('tr-card-big').classList.remove('selected');
@@ -960,6 +1027,7 @@ function trSelectSnake(t){
 }
 function startTailRemoval(){
   showScreen('screen-tr-game');
+  document.getElementById('btn-pause').classList.remove('hidden');
   const botType=trP1Type==='small'?'big':'small';
   document.getElementById('tr-p1-name').textContent=trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
   const p2Name=trGameMode==='local'?(botType==='small'?'⚡ SPECTER':'💥 LEVIATHAN'):(botType==='small'?'🤖 SPECTER BOT':'🤖 LEVIATHAN BOT');
@@ -996,6 +1064,7 @@ function spawnTRFood(snake,owner){
 }
 function trGameLoop(){
   if(!trActive) return;
+  if(isPaused){ trAnimFrame=requestAnimationFrame(trGameLoop); return; }
   const now=Date.now();
   updateShake();
   ctx.save(); ctx.translate(shakeX,shakeY);
@@ -1105,6 +1174,7 @@ function updateTRHud(){
   renderPips('tr-p2-segs',trSnake2?trSnake2.length:TR_INIT_LENGTH,'p2');
 }
 function endTRGame(){
+  document.getElementById('btn-pause').classList.add('hidden');
   cancelAnimationFrame(trAnimFrame); trAnimFrame=null; trActive=false;
   const p1Len=trSnake1.length, p2Len=trSnake2.length;
   let playerWins;
@@ -1211,6 +1281,7 @@ class STWSnake {
 class STWFood {
   constructor(){
     this.alive=true; this.r=STW_FOOD_RADIUS;
+    this.spawnTime=Date.now();
     this.respawn();
   }
   respawn(){
@@ -1346,7 +1417,6 @@ let stwHurdleTimer = 0;
 
 function setupSTWSelect(m){
   stwPendingMode = m;
-  document.getElementById('stw-select-badge').textContent = m === 'bot' ? 'MODE 3 · BOT' : 'MODE 3 · SELF';
   stwSelectedSnake = null;
   document.getElementById('stw-card-small').classList.remove('selected');
   document.getElementById('stw-card-big').classList.remove('selected');
@@ -1375,6 +1445,8 @@ function startShrinkToWin(mode, pType){
   stwGravityEncounters=0; stwRivalsOutperformed=0;
   stwBotActionFrame=0; stwBotLastDecision=0; stwBotTargetFood=null;
   initBgParticles();
+
+  document.getElementById('btn-pause').classList.remove('hidden');
 
   const pa=Math.random()*Math.PI*2;
   const pCfg = pType === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'};
@@ -1525,6 +1597,7 @@ function drawMinimap(){
 
 function stwGameLoop(){
   if(!stwActive) return;
+  if(isPaused){ stwAnimFrame=requestAnimationFrame(stwGameLoop); return; }
   const now=Date.now();
   stwElapsed=now-stwStartTime;
   updateShake();
@@ -1670,6 +1743,7 @@ function stwGameLoop(){
 }
 
 function endSTWGame(playerWon){
+  document.getElementById('btn-pause').classList.add('hidden');
   cancelAnimationFrame(stwAnimFrame); stwAnimFrame=null; stwActive=false;
   const totalMs=Date.now()-stwStartTime;
   const secs=Math.floor(totalMs/1000);
