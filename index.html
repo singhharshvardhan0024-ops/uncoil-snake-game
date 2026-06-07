@@ -106,6 +106,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="menu-group">
       <button class="btn btn-green" onclick="resumeGame()">▶ RESUME</button>
       <button class="btn" onclick="showAboutMode()">ABOUT THIS MODE</button>
+      <button class="btn btn-purple" onclick="restartCurrentGame()">RESTART</button>
       <button class="btn btn-red" onclick="exitToMenu()">EXIT</button>
     </div>
     <div id="pause-about-box" class="instructions-box hidden" style="margin-top:24px; border:1px solid #0af; padding:20px; background:#060914; border-radius:4px; max-width:520px; text-align:left;">
@@ -472,6 +473,20 @@ function resumeGame() {
   isPaused = false;
   document.getElementById('screen-pause').classList.add('hidden');
   document.getElementById('btn-pause').classList.remove('hidden');
+}
+
+function restartCurrentGame() {
+  isPaused = false;
+  document.getElementById('screen-pause').classList.add('hidden');
+  document.getElementById('pause-about-box').classList.add('hidden');
+  if (gameActive) {
+    restartGame();
+  } else if (trActive) {
+    startTailRemoval();
+  } else if (stwActive) {
+    showScreen('screen-stw-game');
+    startShrinkToWin(stwMode, stwSelectedSnake);
+  }
 }
 
 function exitToMenu() {
@@ -1315,19 +1330,18 @@ class STWFood {
   }
 }
 
+// Updated to target a specific snake
 class GravityZone {
-  constructor(){
+  constructor(targetSnake){
     this.r=40; this.alive=true;
     this.spawnTime=Date.now();
-    const allSnakes=[];
-    if(stwPlayerSnake&&stwPlayerSnake.alive) allSnakes.push(stwPlayerSnake);
-    if(stwBotSnake&&stwBotSnake.alive) allSnakes.push(stwBotSnake);
-    if(allSnakes.length>0){
-      const snake=allSnakes[Math.floor(Math.random()*allSnakes.length)];
-      const segs=snake.segments;
-      const seg=segs[Math.floor(Math.random()*segs.length)];
-      this.x=seg.x; this.y=seg.y;
-    } else { this.x=CX; this.y=CY; }
+    if(targetSnake && targetSnake.alive && targetSnake.segments.length > 0){
+      const segs = targetSnake.segments;
+      const seg = segs[Math.floor(Math.random() * segs.length)];
+      this.x = seg.x; this.y = seg.y;
+    } else {
+      this.x = CX; this.y = CY;
+    }
   }
   isExpired(){ return Date.now()-this.spawnTime>STW_GRAVITY_DURATION; }
   contains(x,y){
@@ -1628,7 +1642,17 @@ function stwGameLoop(){
 
   if(now >= stwHurdleTimer){
     if(stwHurdleState === 'wait_gravity'){
-      stwGravityZones.push(new GravityZone());
+      // Purge old zones to guarantee no extras lingering in gameplay
+      stwGravityZones = [];
+      
+      // Spawn exactly one per participant
+      if(stwMode === 'bot') {
+        if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
+        if(stwBotSnake && stwBotSnake.alive) stwGravityZones.push(new GravityZone(stwBotSnake));
+      } else {
+        if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
+      }
+      
       stwHurdleState = 'gravity';
       stwHurdleTimer = now + 5000;
     } else if(stwHurdleState === 'gravity'){
