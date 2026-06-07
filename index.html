@@ -162,6 +162,15 @@ canvas{display:block;position:absolute;top:0;left:0}
   </div>
 
   <div id="screen-tr-select" class="screen hidden">
+    <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">TAIL REMOVAL</div>
+    <div class="menu-group">
+      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('bot')">🤖 VS BOT</button>
+      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('local')">👥 LOCAL 2P</button>
+      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
+    </div>
+  </div>
+
+  <div id="screen-tr-select" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">TAIL REMOVAL</div>
     <div class="section-title">Choose your serpent</div>
     <div class="mode-row">
@@ -410,7 +419,6 @@ function toggleSetting(k){
   document.getElementById('toggle-'+k).classList.toggle('active',settings[k]);
 }
 
-// ── GAME SCREENS — used by showScreen to decide when to clear the canvas ──
 const GAME_SCREENS = new Set(['screen-game','screen-tr-game','screen-stw-game']);
 
 let currentScreen = 'screen-menu';
@@ -422,7 +430,6 @@ function showScreen(id){
   document.getElementById(id).classList.remove('hidden');
   currentScreen = id;
 
-  // Navigating AWAY from game screens: kill all loops + wipe the canvas
   if(!GAME_SCREENS.has(id)){
     gameActive  = false;
     trActive    = false;
@@ -432,7 +439,6 @@ function showScreen(id){
     if(animFrame)    { cancelAnimationFrame(animFrame);    animFrame    = null; }
     if(trAnimFrame)  { cancelAnimationFrame(trAnimFrame);  trAnimFrame  = null; }
     if(stwAnimFrame) { cancelAnimationFrame(stwAnimFrame); stwAnimFrame = null; }
-    // Clear the game canvas so no ghost frames bleed onto menu/result screens
     ctx.clearRect(0, 0, W, H);
     particles = [];
   }
@@ -448,10 +454,7 @@ function pauseGame() {
 
 function resumeGame() {
   const pauseDuration = Date.now() - pauseStartTime;
-  
-  if (gameActive) {
-    gameStartTime += pauseDuration;
-  }
+  if (gameActive) { gameStartTime += pauseDuration; }
   if (trActive) {
     trStartTime += pauseDuration;
     trFoods.forEach(f => f.spawnTime += pauseDuration);
@@ -466,7 +469,6 @@ function resumeGame() {
     stwRivals.forEach(rv => rv.spawnTime += pauseDuration);
     stwFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
   }
-
   isPaused = false;
   document.getElementById('screen-pause').classList.add('hidden');
   document.getElementById('btn-pause').classList.remove('hidden');
@@ -568,6 +570,7 @@ const SNAKE_CONFIGS={
   big:  { length:14, speed:2.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 
+// ── MODE 2 Snake (Predator) — keeps wallSlowTimer penalty intentionally ──
 class Snake {
   constructor(cfg,x,y,angle,isP2){
     this.cfg=cfg; this.x=x; this.y=y; this.angle=angle; this.isP2=isP2;
@@ -1195,7 +1198,7 @@ function endTRGame(){
 }
 
 // =========================================================
-// MODE 3 — SHRINK TO WIN  (with Slither.io-style camera)
+// MODE 3 — SHRINK TO WIN
 // =========================================================
 const STW_INIT_LENGTH = 40;
 const STW_PLAYER_INIT_LENGTH = 60;
@@ -1212,6 +1215,8 @@ let STW_RADIUS;
 const stwCam = { x: 0, y: 0 };
 const STW_CAM_LERP = 0.08;
 
+// ── FIX: STWSnake.update() — NO wallSlowTimer speed penalty in Mode 3 ──
+// Wall bounce still steers the snake away, but speed is never reduced.
 class STWSnake {
   constructor(x,y,angle,color,glow, initLen = STW_INIT_LENGTH){
     this.x=x; this.y=y; this.angle=angle;
@@ -1219,7 +1224,7 @@ class STWSnake {
     this.speed=2.2; this.turnSpeed=0.07;
     this.length=initLen;
     this.segments=[];
-    this.wallSlowTimer=0; this.alive=true;
+    this.alive=true;
     this.foodEaten=0;
     this.lastTeleportTime=0;
     for(let i=0;i<initLen;i++)
@@ -1250,16 +1255,16 @@ class STWSnake {
   }
   update(r){
     if(!this.alive) return;
-    let spd=this.speed;
-    if(this.wallSlowTimer>0){ spd*=0.4; this.wallSlowTimer--; }
+    // Speed is always full — no wall slow penalty in Mode 3
+    const spd = this.speed;
     let nx=this.x+Math.cos(this.angle)*spd;
     let ny=this.y+Math.sin(this.angle)*spd;
     const dist=Math.hypot(nx-CX,ny-CY);
     if(dist>r-SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.4;
-      nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
-      this.wallSlowTimer=25;
+      nx=this.x+Math.cos(this.angle)*spd;
+      ny=this.y+Math.sin(this.angle)*spd;
     }
     this.x=nx; this.y=ny;
     this.segments.unshift({x:this.x,y:this.y});
@@ -1355,7 +1360,6 @@ class RivalSnake extends STWSnake {
     const r=STW_RADIUS*0.5+Math.random()*STW_RADIUS*0.3;
     const x=CX+Math.cos(angle)*r;
     const y=CY+Math.sin(angle)*r;
-    // Orange generic color for STW rivals
     super(x,y,Math.random()*Math.PI*2,'#ff6b35','#ff3300');
     this.speed=2.0; this.turnSpeed=0.065;
     this.spawnTime=Date.now();
@@ -1587,7 +1591,7 @@ function drawMinimap(){
     const ax=p.x+Math.cos(stwPlayerSnake.angle)*7;
     const ay=p.y+Math.sin(stwPlayerSnake.angle)*7;
     mctx.beginPath(); mctx.moveTo(p.x,p.y); mctx.lineTo(ax,ay);
-    mctx.strokeStyle = stwSelectedSnake === 'small' ? '#0ff' : '#f0a'; 
+    mctx.strokeStyle = stwSelectedSnake === 'small' ? '#0ff' : '#f0a';
     mctx.lineWidth=1.5; mctx.stroke();
   }
 
@@ -1708,7 +1712,6 @@ function stwGameLoop(){
 
   ctx.restore(); // pop camera
 
-  // Screen-space overlay: player indicator ring
   ctx.save();
   ctx.beginPath();
   ctx.arc(CX,CY,SEGMENT_SIZE*1.8,0,Math.PI*2);
