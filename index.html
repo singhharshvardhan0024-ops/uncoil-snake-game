@@ -126,19 +126,10 @@ canvas{display:block;position:absolute;top:0;left:0}
   <div id="screen-modes" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">SELECT MODE</div>
     <div class="menu-group">
-      <button class="btn" onclick="showScreen('screen-tr-modes')">✂️ MODE 1 <span style="font-size:10px;opacity:.6">TAIL REMOVAL</span></button>
+      <button class="btn" onclick="showScreen('screen-tr-select')">✂️ MODE 1 <span style="font-size:10px;opacity:.6">TAIL REMOVAL</span></button>
       <button class="btn" onclick="showScreen('screen-predator-modes')">⚔️ MODE 2 <span style="font-size:10px;opacity:.6">PREDATOR</span></button>
       <button class="btn" onclick="showScreen('screen-stw-modes')">🌀 MODE 3 <span style="font-size:10px;opacity:.6">SHRINK TO WIN</span></button>
       <button class="btn btn-red" onclick="showScreen('screen-menu')">← BACK</button>
-    </div>
-  </div>
-
-  <div id="screen-tr-modes" class="screen hidden">
-    <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">TAIL REMOVAL</div>
-    <div class="menu-group">
-      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('bot')">🤖 VS BOT</button>
-      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('local')">👥 LOCAL 2P</button>
-      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
     </div>
   </div>
 
@@ -182,10 +173,15 @@ canvas{display:block;position:absolute;top:0;left:0}
         <button class="diff-btn" id="tr-diff-medium" onclick="trSetDiff('medium',this)">MEDIUM</button>
         <button class="diff-btn" id="tr-diff-hard" onclick="trSetDiff('hard',this)">HARD</button>
       </div>
+      <div class="section-title">OPPONENT TYPE</div>
+      <div class="mode-row">
+        <button class="diff-btn active" onclick="setupTRMode('bot'); document.querySelectorAll('#screen-tr-select .tr-opp').forEach(b=>b.classList.remove('active')); this.classList.add('active');" class="tr-opp">BOT</button>
+        <button class="diff-btn" onclick="setupTRMode('local'); document.querySelectorAll('#screen-tr-select .tr-opp').forEach(b=>b.classList.remove('active')); this.classList.add('active');" class="tr-opp">LOCAL 2P</button>
+      </div>
     </div>
     <div style="margin-top:16px;display:flex;gap:12px">
       <button class="btn btn-green hidden" id="tr-btn-start" onclick="startTailRemoval()">▶ FIGHT!</button>
-      <button class="btn btn-red" onclick="showScreen('screen-tr-modes')">← BACK</button>
+      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
     </div>
   </div>
 
@@ -355,6 +351,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p>
       <li>Gravity Zones 🌀 teleport you instantly — avoid them!</li>
       <li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li>
+      <li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li>
       <li>Rival snakes compete for the same food — be quick!</li>
       <li>Hurdles alternate, appearing for a brief duration followed by a wait</li>
       <li>Use the minimap (bottom-right) to track the full arena</li>
@@ -460,6 +457,7 @@ function resumeGame() {
     if(stwBotSnake) stwBotSnake.lastTeleportTime += pauseDuration;
     stwGravityZones.forEach(gz => gz.spawnTime += pauseDuration);
     stwBlackHoles.forEach(bh => bh.spawnTime += pauseDuration);
+    stwHunters.forEach(h => h.spawnTime += pauseDuration);
     stwRivals.forEach(rv => rv.spawnTime += pauseDuration);
     stwFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
   }
@@ -497,7 +495,7 @@ function showAboutMode() {
   } else if (trActive) {
     box.innerHTML = `<h2>✂️ MODE 1 — TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−2 length) and avoid green food which grows you (+3 length).</p><li>Food is player-specific: you can only eat your own food and will pass right through your opponent's</li><li>Food spawns ahead of your snake — you have 2 seconds to react</li><li>After 2 seconds food disappears and new food spawns</li><li>First to reach length 1 wins!</li>`;
   } else if (stwActive) {
-    box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Use the minimap (bottom-right) to track the full arena</li>`;
+    box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Use the minimap (bottom-right) to track the full arena</li>`;
   }
 }
 
@@ -1015,11 +1013,6 @@ class TRFood {
   }
 }
 
-let trGameMode='bot', trSnake1=null, trSnake2=null, trFoods=[], trActive=false;
-let trStartTime=0, trAnimFrame=null, trDiff='easy', trP1Type='small';
-let trInputDir={x:0,y:0}, trInputDir2={x:0,y:0};
-const trBot={ actionFrame:0, lastDecisionFrame:0, targetFood:null, reactionDelay:0, lastFoodSeen:null };
-
 function setupTRMode(m){
   trGameMode=m;
   document.getElementById('tr-diff-section').classList.toggle('hidden',m!=='bot');
@@ -1035,6 +1028,12 @@ function trSelectSnake(t){
   document.getElementById('tr-card-big').classList.toggle('selected',t==='big');
   document.getElementById('tr-btn-start').classList.remove('hidden');
 }
+
+let trGameMode='bot', trSnake1=null, trSnake2=null, trFoods=[], trActive=false;
+let trStartTime=0, trAnimFrame=null, trDiff='easy', trP1Type='small';
+let trInputDir={x:0,y:0}, trInputDir2={x:0,y:0};
+const trBot={ actionFrame:0, lastDecisionFrame:0, targetFood:null, reactionDelay:0, lastFoodSeen:null };
+
 function startTailRemoval(){
   showScreen('screen-tr-game');
   document.getElementById('btn-pause').classList.remove('hidden');
@@ -1217,6 +1216,8 @@ const STW_RIVAL_DURATION   = 5000;
 const STW_RIVAL_SHRINK     = -3;
 const STW_TELEPORT_COOLDOWN = 2000;
 const STW_BLACKHOLE_DURATION = 5000;
+const STW_HUNTER_DURATION = 5000;
+const STW_HUNTER_PENALTY = 10;
 
 let STW_RADIUS;
 
@@ -1447,6 +1448,42 @@ class RivalSnake extends STWSnake {
   }
 }
 
+class MongooseHunter {
+  constructor(target) {
+    this.target = target;
+    this.r = 16;
+    this.speed = 4.8;
+    this.alive = true;
+    this.spawnTime = Date.now();
+    const angle = Math.random() * Math.PI * 2;
+    this.x = CX + Math.cos(angle) * (STW_RADIUS * 0.9);
+    this.y = CY + Math.sin(angle) * (STW_RADIUS * 0.9);
+  }
+  isExpired() { return Date.now() - this.spawnTime > STW_HUNTER_DURATION; }
+  update() {
+    if (!this.alive || !this.target || !this.target.alive) return;
+    const head = this.target.segments[0] || {x: this.target.x, y: this.target.y};
+    const angle = Math.atan2(head.y - this.y, head.x - this.x);
+    this.x += Math.cos(angle) * this.speed;
+    this.y += Math.sin(angle) * this.speed;
+  }
+  draw() {
+    if (!this.alive) return;
+    const age = (Date.now() - this.spawnTime) / STW_HUNTER_DURATION;
+    const alpha = age < 0.15 ? (age/0.15) : age > 0.85 ? ((1-age)/0.15) : 1;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(this.x, this.y);
+    ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI*2);
+    ctx.fillStyle = '#833'; 
+    ctx.fill();
+    ctx.strokeStyle = '#f04'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('👹', 0, 0);
+    ctx.restore();
+  }
+}
+
 let stwActive=false, stwMode='bot';
 let stwSelectedSnake=null, stwPendingMode=null;
 let stwPlayerSnake=null, stwBotSnake=null;
@@ -1454,6 +1491,7 @@ let stwFoods=[];
 let stwGravityZones=[];
 let stwBlackHoles=[];
 let stwRivals=[];
+let stwHunters=[];
 let stwAnimFrame=null;
 let stwStartTime=0;
 let stwElapsed=0;
@@ -1503,7 +1541,7 @@ function enforceOrbit(snake, bh) {
 function startShrinkToWin(mode, pType){
   STW_RADIUS = Math.min(W,H)*0.88;
   stwMode=mode; stwActive=true;
-  stwFoods=[]; stwGravityZones=[]; stwBlackHoles=[]; stwRivals=[]; particles=[];
+  stwFoods=[]; stwGravityZones=[]; stwBlackHoles=[]; stwRivals=[]; stwHunters=[]; particles=[];
   stwGravityEncounters=0; stwRivalsOutperformed=0;
   stwBotActionFrame=0; stwBotLastDecision=0; stwBotTargetFood=null;
   initBgParticles();
@@ -1640,6 +1678,13 @@ function drawMinimap(){
     mctx.beginPath(); mctx.arc(p.x,p.y,3,0,Math.PI*2);
     mctx.fillStyle='#ff6b35'; mctx.fill();
   });
+  
+  stwHunters.forEach(h=>{
+    if(!h.alive) return;
+    const p=toMm(h.x,h.y);
+    mctx.beginPath(); mctx.arc(p.x,p.y,4,0,Math.PI*2);
+    mctx.fillStyle='#f04'; mctx.fill();
+  });
 
   if(stwBotSnake&&stwBotSnake.alive){
     const p=toMm(stwBotSnake.x,stwBotSnake.y);
@@ -1714,8 +1759,6 @@ function stwGameLoop(){
       el.classList.remove('hidden');
       setTimeout(()=> {
         el.classList.add('hidden');
-        el.textContent = '⚡ GRAVITY ZONE!';
-        el.style.color = '#f0a';
       }, 2000);
     } else if(stwHurdleState === 'blackhole'){
       stwHurdleState = 'wait_rival';
@@ -1725,6 +1768,26 @@ function stwGameLoop(){
       stwHurdleState = 'rival';
       stwHurdleTimer = now + 5000;
     } else if(stwHurdleState === 'rival'){
+      stwHurdleState = 'wait_hunter';
+      stwHurdleTimer = now + 10000;
+    } else if(stwHurdleState === 'wait_hunter'){
+      stwHunters = [];
+      if (stwPlayerSnake && stwPlayerSnake.alive) stwHunters.push(new MongooseHunter(stwPlayerSnake));
+      if (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwHunters.push(new MongooseHunter(stwBotSnake));
+      
+      stwHurdleState = 'hunter';
+      stwHurdleTimer = now + STW_HUNTER_DURATION;
+      
+      const el = document.getElementById('stw-event-label');
+      el.textContent = '👹 ENEMY HUNTERS!';
+      el.style.color = '#f04';
+      el.classList.remove('hidden');
+      setTimeout(()=> {
+        el.classList.add('hidden');
+        el.textContent = '⚡ GRAVITY ZONE!';
+        el.style.color = '#f0a';
+      }, 2000);
+    } else if(stwHurdleState === 'hunter'){
       stwHurdleState = 'wait_gravity';
       stwHurdleTimer = now + 10000;
     }
@@ -1733,6 +1796,7 @@ function stwGameLoop(){
   // Filter Expired Hurdle Elements
   stwGravityZones=stwGravityZones.filter(gz=>{ if(gz.isExpired()){ gz.alive=false; return false; } return true; });
   stwBlackHoles=stwBlackHoles.filter(bh=>{ if(bh.isExpired()){ bh.alive=false; return false; } return true; });
+  stwHunters=stwHunters.filter(h=>{ if(h.isExpired()){ h.alive=false; return false; } return true; });
   stwRivals=stwRivals.filter(r=>{ if(r.isExpired()){ stwRivalsOutperformed++; return false; } return true; });
 
   let playerTrapped = stwBlackHoles.some(bh => bh.target === stwPlayerSnake);
@@ -1751,6 +1815,21 @@ function stwGameLoop(){
   stwPlayerSnake.update(STW_RADIUS);
   if(stwBotSnake) stwBotSnake.update(STW_RADIUS);
   stwRivals.forEach(r=>{ r.think(); r.update(STW_RADIUS); });
+  
+  // Update Hunters and Check Collision
+  stwHunters.forEach(h => {
+    h.update();
+    if(!h.alive) return;
+    const target = h.target;
+    if(target && target.alive) {
+      if(Math.hypot(h.x - target.x, h.y - target.y) < SEGMENT_SIZE + h.r) {
+        h.alive = false;
+        target.setLength(target.length + STW_HUNTER_PENALTY);
+        addParticles(target.x, target.y, '#f04', 20);
+        if (target === stwPlayerSnake) triggerShake();
+      }
+    }
+  });
 
   // Gravity Zone Interactions
   stwGravityZones.forEach(gz=>{
@@ -1821,6 +1900,7 @@ function stwGameLoop(){
   stwBlackHoles.forEach(bh=>bh.draw());
   stwFoods.forEach(f=>f.draw());
   stwRivals.forEach(r=>r.draw());
+  stwHunters.forEach(h=>h.draw());
   if(stwBotSnake) stwBotSnake.draw();
   stwPlayerSnake.draw();
   drawParticles();
