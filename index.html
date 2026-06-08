@@ -163,15 +163,6 @@ canvas{display:block;position:absolute;top:0;left:0}
   </div>
 
   <div id="screen-tr-select" class="screen hidden">
-    <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">TAIL REMOVAL</div>
-    <div class="menu-group">
-      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('bot')">🤖 VS BOT</button>
-      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('local')">👥 LOCAL 2P</button>
-      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
-    </div>
-  </div>
-
-  <div id="screen-tr-select" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">TAIL REMOVAL</div>
     <div class="section-title">Choose your serpent</div>
     <div class="mode-row">
@@ -1286,7 +1277,8 @@ class STWSnake {
   }
   draw(){
     if(!this.alive) return;
-    ctx.save(); ctx.shadowColor=this.glow; ctx.shadowBlur=14;
+    ctx.save(); ctx.shadowColor=this.glow; 
+    // Removed shadowBlur to prevent massive framerate drops (which caused the slow-down effect)
     for(let i=this.segments.length-1;i>=0;i--){
       const s=this.segments[i]; const t=1-i/this.segments.length;
       const r=SEGMENT_SIZE*(0.45+t*0.65);
@@ -1315,7 +1307,7 @@ class STWFood {
   draw(){
     if(!this.alive) return;
     ctx.save();
-    ctx.shadowColor='#0af'; ctx.shadowBlur=18;
+    ctx.shadowColor='#0af'; ctx.shadowBlur=8;
     ctx.beginPath(); ctx.arc(this.x,this.y,this.r+4,0,Math.PI*2);
     ctx.strokeStyle='#0af'; ctx.lineWidth=1.5; ctx.globalAlpha=0.35; ctx.stroke();
     ctx.globalAlpha=1;
@@ -1353,14 +1345,16 @@ class GravityZone {
     ctx.save(); ctx.globalAlpha=alpha*0.55;
     for(let i=0;i<3;i++){
       ctx.beginPath(); ctx.arc(this.x,this.y,this.r*(0.4+i*0.3),0,Math.PI*2);
-      ctx.strokeStyle=`hsl(${190+i*20},100%,60%)`; ctx.lineWidth=2; ctx.shadowColor='#0af'; ctx.shadowBlur=20; ctx.stroke();
+      ctx.strokeStyle=`hsl(${190+i*20},100%,60%)`; ctx.lineWidth=2; 
+      // Removed shadowBlur to prevent massive framerate drops
+      ctx.stroke();
     }
     ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
     const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r);
     g.addColorStop(0,'rgba(0,200,255,0.3)'); g.addColorStop(1,'rgba(0,80,180,0)');
     ctx.fillStyle=g; ctx.fill();
     ctx.globalAlpha=alpha*0.9; ctx.font=`${18+Math.sin(t)*3}px Segoe UI`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle='#0ff'; ctx.shadowColor='#0af'; ctx.shadowBlur=10;
+    ctx.fillStyle='#0ff';
     ctx.fillText('🌀',this.x,this.y);
     ctx.restore();
   }
@@ -1397,7 +1391,8 @@ class BlackHole {
     ctx.fillStyle = grad;
     ctx.beginPath(); ctx.arc(0,0,this.r + 20, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2);
-    ctx.fillStyle = '#000'; ctx.shadowColor = '#a0f'; ctx.shadowBlur = 20;
+    ctx.fillStyle = '#000'; 
+    // Removed shadowBlur to prevent massive framerate drops
     ctx.fill();
     ctx.restore();
   }
