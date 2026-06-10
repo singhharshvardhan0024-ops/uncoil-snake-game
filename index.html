@@ -80,7 +80,6 @@ canvas{display:block;position:absolute;top:0;left:0}
 .food-timer-label{font-size:11px;letter-spacing:2px;color:#0af}
 .mode-badge{display:inline-block;padding:3px 10px;border-radius:2px;font-size:10px;letter-spacing:2px;margin-bottom:6px}
 .mode-badge.mode1{background:#0af2;border:1px solid #0af;color:#0ff}
-.mode-badge.mode2{background:#f042;border:1px solid #f04;color:#f0a}
 .mode-badge.mode3{background:#0af2;border:1px solid #0af;color:#0ff}
 #stw-hud{position:absolute;top:12px;left:0;width:100%;display:flex;justify-content:space-between;padding:0 20px;pointer-events:none;align-items:flex-start}
 .stw-box{display:flex;flex-direction:column;align-items:center;min-width:120px}
@@ -126,7 +125,7 @@ canvas{display:block;position:absolute;top:0;left:0}
   <div id="screen-modes" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">SELECT MODE</div>
     <div class="menu-group">
-      <button class="btn" onclick="showScreen('screen-tr-select')">✂️ MODE 1 <span style="font-size:10px;opacity:.6">TAIL REMOVAL</span></button>
+      <button class="btn" onclick="showScreen('screen-tr-modes')">✂️ MODE 1 <span style="font-size:10px;opacity:.6">TAIL REMOVAL</span></button>
       <button class="btn" onclick="showScreen('screen-predator-modes')">⚔️ MODE 2 <span style="font-size:10px;opacity:.6">PREDATOR</span></button>
       <button class="btn" onclick="showScreen('screen-stw-modes')">🌀 MODE 3 <span style="font-size:10px;opacity:.6">SHRINK TO WIN</span></button>
       <button class="btn btn-red" onclick="showScreen('screen-menu')">← BACK</button>
@@ -145,10 +144,18 @@ canvas{display:block;position:absolute;top:0;left:0}
 
   <div id="screen-stw-modes" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">SHRINK TO WIN</div>
-    <div style="color:#8af;font-size:12px;letter-spacing:2px;margin:8px 0 0;max-width:360px;text-align:center">Collect shrink food, dodge gravity zones, outrace rival snakes</div>
     <div class="menu-group">
       <button class="btn" onclick="setupSTWSelect('bot')">🤖 PLAY WITH BOT</button>
       <button class="btn" onclick="setupSTWSelect('self')">🧘 PLAY WITH SELF</button>
+      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
+    </div>
+  </div>
+
+  <div id="screen-tr-modes" class="screen hidden">
+    <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">TAIL REMOVAL</div>
+    <div class="menu-group">
+      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('bot')">🤖 VS BOT</button>
+      <button class="btn" onclick="showScreen('screen-tr-select'); setupTRMode('local')">👥 LOCAL 2P</button>
       <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
     </div>
   </div>
@@ -173,35 +180,23 @@ canvas{display:block;position:absolute;top:0;left:0}
         <button class="diff-btn" id="tr-diff-medium" onclick="trSetDiff('medium',this)">MEDIUM</button>
         <button class="diff-btn" id="tr-diff-hard" onclick="trSetDiff('hard',this)">HARD</button>
       </div>
-      <div class="section-title">OPPONENT TYPE</div>
-      <div class="mode-row">
-        <button class="diff-btn active" onclick="setupTRMode('bot'); document.querySelectorAll('#screen-tr-select .tr-opp').forEach(b=>b.classList.remove('active')); this.classList.add('active');" class="tr-opp">BOT</button>
-        <button class="diff-btn" onclick="setupTRMode('local'); document.querySelectorAll('#screen-tr-select .tr-opp').forEach(b=>b.classList.remove('active')); this.classList.add('active');" class="tr-opp">LOCAL 2P</button>
-      </div>
     </div>
     <div style="margin-top:16px;display:flex;gap:12px">
       <button class="btn btn-green hidden" id="tr-btn-start" onclick="startTailRemoval()">▶ FIGHT!</button>
-      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
+      <button class="btn btn-red" onclick="showScreen('screen-tr-modes')">← BACK</button>
     </div>
   </div>
 
   <div id="screen-snake-select" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(22px,4vw,40px)">CHOOSE YOUR SERPENT</div>
-    <div class="mode-badge mode2">MODE 2 · PREDATOR</div>
     <div class="section-title" id="select-instruction">Player 1: Pick your snake</div>
     <div class="mode-row">
       <div class="snake-card" id="card-small" onclick="selectSnake('small')">
         <h3>⚡ SPECTER</h3>
-        <div class="stat-row">Speed <div class="stat-bar" id="bar-spd-s"></div></div>
-        <div class="stat-row">Attack <div class="stat-bar" id="bar-atk-s"></div></div>
-        <div class="stat-row">Defense <div class="stat-bar" id="bar-def-s"></div></div>
         <div style="font-size:10px;color:#0af4;margin-top:8px">Balanced · Identical Stats</div>
       </div>
       <div class="snake-card" id="card-big" onclick="selectSnake('big')">
         <h3>💥 LEVIATHAN</h3>
-        <div class="stat-row">Speed <div class="stat-bar" id="bar-spd-b"></div></div>
-        <div class="stat-row">Attack <div class="stat-bar" id="bar-atk-b"></div></div>
-        <div class="stat-row">Defense <div class="stat-bar" id="bar-def-b"></div></div>
         <div style="font-size:10px;color:#0af4;margin-top:8px">Balanced · Identical Stats</div>
       </div>
     </div>
@@ -304,7 +299,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div id="stw-hud">
       <div class="stw-box">
         <div class="stw-label">🐍 YOUR LENGTH</div>
-        <div class="stw-len" id="stw-player-len">80</div>
+        <div class="stw-len" id="stw-player-len">120</div>
         <div class="stw-target" id="stw-target-label">TARGET: 1</div>
       </div>
       <div class="stw-center">
@@ -313,7 +308,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       </div>
       <div class="stw-box" style="align-items:flex-end">
         <div class="stw-label" id="stw-rival-label">🤖 RIVAL</div>
-        <div class="stw-len" style="color:#f0a;text-shadow:0 0 12px #f04" id="stw-rival-len">80</div>
+        <div class="stw-len" style="color:#f0a;text-shadow:0 0 12px #f04" id="stw-rival-len">120</div>
         <div class="stw-target" style="color:#f04" id="stw-rival-count"></div>
       </div>
     </div>
@@ -392,12 +387,13 @@ const GC = document.getElementById('game');
 const bgCtx = BG.getContext('2d');
 const ctx   = GC.getContext('2d');
 
-let W, H, CX, CY, RADIUS;
+let W, H, CX, CY, RADIUS, PREDATOR_RADIUS;
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
   BG.width = GC.width = W; BG.height = GC.height = H;
   CX = W/2; CY = H/2;
   RADIUS = Math.min(W,H)*0.42;
+  PREDATOR_RADIUS = RADIUS * 1.0723805; // 15% Area Increase for Predator Mode
 }
 resize();
 window.addEventListener('resize',()=>{ resize(); if(gameActive) initPositions(); });
@@ -499,21 +495,6 @@ function showAboutMode() {
   }
 }
 
-function buildStatBars(){
-  const fill=(id,val)=>{
-    const el=document.getElementById(id); if(!el) return;
-    el.innerHTML='';
-    for(let i=0;i<10;i++){
-      const d=document.createElement('div');
-      d.className='stat-pip'+(i<val?' on':'');
-      el.appendChild(d);
-    }
-  };
-  fill('bar-spd-s',7); fill('bar-atk-s',7); fill('bar-def-s',7);
-  fill('bar-spd-b',7); fill('bar-atk-b',7); fill('bar-def-b',7);
-}
-buildStatBars();
-
 let gameMode='bot', botDiff='easy';
 let p1Snake=null, p2Snake=null, selectionStep=0;
 
@@ -572,8 +553,8 @@ function cancelMatchmaking(){ clearInterval(matchInterval); showScreen('screen-p
 
 const SEGMENT_SIZE=8;
 const SNAKE_CONFIGS={
-  small:{ length:14, speed:2.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
-  big:  { length:14, speed:2.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
+  small:{ length:34, speed:2.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
+  big:  { length:34, speed:2.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 
 class Snake {
@@ -597,7 +578,7 @@ class Snake {
     let nx=this.x+Math.cos(this.angle)*spd;
     let ny=this.y+Math.sin(this.angle)*spd;
     const dist=Math.hypot(nx-CX,ny-CY);
-    if(dist>RADIUS-SEGMENT_SIZE){
+    if(dist>PREDATOR_RADIUS-SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.5;
       nx=this.x+Math.cos(this.angle)*spd;
@@ -706,7 +687,7 @@ function botThinkEasy(){
   const head=snake2.segments[0];
   const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
   if(Math.random()<0.30){ bot.wanderAngle=Math.random()*Math.PI*2; bot.wanderTimer=40+Math.floor(Math.random()*60); bot.state='wander'; }
-  else if(dist<RADIUS*0.6&&Math.random()<0.5){ bot.state='pursue'; bot.missTimer=Math.random()<0.45?30+Math.random()*40:0; }
+  else if(dist<PREDATOR_RADIUS*0.6&&Math.random()<0.5){ bot.state='pursue'; bot.missTimer=Math.random()<0.45?30+Math.random()*40:0; }
   else{ bot.state='wander'; bot.wanderAngle=snake2.angle+(Math.random()-0.5)*Math.PI; bot.wanderTimer=50; }
 }
 function executeEasyPursuit(){
@@ -724,14 +705,14 @@ function botThinkMedium(){
   bot.actionFrame++;
   const head=snake2.segments[0];
   const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
-  const wallDist=RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  const wallDist=PREDATOR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
   if(bot.feintTimer>0){ bot.feintTimer--; snake2.turn(bot.feintDir*0.9); if(bot.feintTimer===0) bot.state='attack'; return; }
   const di=18+Math.floor(Math.random()*12);
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeMediumMove(dist,wallDist); return; }
   bot.lastDecisionFrame=bot.actionFrame;
-  if(wallDist<RADIUS*0.22){ bot.state='dodge'; bot.stateTimer=25; }
-  else if(dist<RADIUS*0.5&&Math.random()<0.25&&bot.state!=='feint'){ bot.state='feint'; bot.feintDir=Math.random()<0.5?1:-1; bot.feintTimer=10+Math.floor(Math.random()*8); }
-  else if(dist<RADIUS*0.75){ bot.state='pursue'; }
+  if(wallDist<PREDATOR_RADIUS*0.22){ bot.state='dodge'; bot.stateTimer=25; }
+  else if(dist<PREDATOR_RADIUS*0.5&&Math.random()<0.25&&bot.state!=='feint'){ bot.state='feint'; bot.feintDir=Math.random()<0.5?1:-1; bot.feintTimer=10+Math.floor(Math.random()*8); }
+  else if(dist<PREDATOR_RADIUS*0.75){ bot.state='pursue'; }
   else{ bot.state='wander'; bot.wanderAngle=snake2.angle+(Math.random()-0.5)*0.8; bot.wanderTimer=30; }
 }
 function executeMediumMove(dist,wallDist){
@@ -759,16 +740,16 @@ function botThinkHard(){
   bot.actionFrame++;
   const head=snake2.segments[0];
   const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
-  const wallDist=RADIUS-Math.hypot(head.x-CX,head.y-CY);
-  const playerWallDist=RADIUS-Math.hypot(snake1.x-CX,snake1.y-CY);
+  const wallDist=PREDATOR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  const playerWallDist=PREDATOR_RADIUS-Math.hypot(snake1.x-CX,snake1.y-CY);
   const di=6+Math.floor(Math.random()*4);
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeHardMove(dist,wallDist,playerWallDist); return; }
   bot.lastDecisionFrame=bot.actionFrame;
   if(bot.counterTimer>0){ bot.counterTimer--; bot.state='attack'; }
-  else if(wallDist<RADIUS*0.15){ bot.state='escape'; bot.stateTimer=20; }
-  else if(playerWallDist<RADIUS*0.28&&dist<RADIUS*0.55&&Math.random()<0.55){ bot.state='trap'; bot.stateTimer=30+Math.floor(Math.random()*20); bot.trapPhase=true; }
-  else if(dist<RADIUS*0.4&&Math.random()<0.15&&!bot.baitPhase){ bot.state='bait'; bot.baitTimer=20+Math.floor(Math.random()*15); bot.baitPhase=true; }
-  else if(dist<RADIUS*0.65){ bot.state='attack'; bot.baitPhase=false; }
+  else if(wallDist<PREDATOR_RADIUS*0.15){ bot.state='escape'; bot.stateTimer=20; }
+  else if(playerWallDist<PREDATOR_RADIUS*0.28&&dist<PREDATOR_RADIUS*0.55&&Math.random()<0.55){ bot.state='trap'; bot.stateTimer=30+Math.floor(Math.random()*20); bot.trapPhase=true; }
+  else if(dist<PREDATOR_RADIUS*0.4&&Math.random()<0.15&&!bot.baitPhase){ bot.state='bait'; bot.baitTimer=20+Math.floor(Math.random()*15); bot.baitPhase=true; }
+  else if(dist<PREDATOR_RADIUS*0.65){ bot.state='attack'; bot.baitPhase=false; }
   else bot.state='pursue';
 }
 function executeHardMove(dist,wallDist,playerWallDist){
@@ -780,11 +761,11 @@ function executeHardMove(dist,wallDist,playerWallDist){
     const predict=bot.state==='attack'?22:14;
     let aimX=snake1.x+Math.cos(snake1.angle)*snake1.speed*predict;
     let aimY=snake1.y+Math.sin(snake1.angle)*snake1.speed*predict;
-    if(dist<RADIUS*0.3&&snake1.segments.length>6){ const mid=snake1.segments[Math.floor(snake1.segments.length*0.45)]; aimX=mid.x; aimY=mid.y; }
+    if(dist<PREDATOR_RADIUS*0.3&&snake1.segments.length>6){ const mid=snake1.segments[Math.floor(snake1.segments.length*0.45)]; aimX=mid.x; aimY=mid.y; }
     const a=Math.atan2(aimY-head.y,aimX-head.x);
     let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.06)*Math.min(1.3,Math.abs(da)*1.8));
-    if(wallDist<RADIUS*0.2){ const ca=Math.atan2(CY-head.y,CX-head.x); let cda=ca-snake2.angle; while(cda>Math.PI) cda-=Math.PI*2; while(cda<-Math.PI) cda+=Math.PI*2; snake2.turn(Math.sign(cda)*0.6); }
+    if(wallDist<PREDATOR_RADIUS*0.2){ const ca=Math.atan2(CY-head.y,CX-head.x); let cda=ca-snake2.angle; while(cda>Math.PI) cda-=Math.PI*2; while(cda<-Math.PI) cda+=Math.PI*2; snake2.turn(Math.sign(cda)*0.6); }
   }
 }
 function predatorBotThink(){
@@ -800,7 +781,7 @@ function initBgParticles(){
   for(let i=0;i<60;i++) bgParticles.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.5+.3,vx:(Math.random()-.5)*.2,vy:(Math.random()-.5)*.2,a:Math.random()*.6+.2});
 }
 function initPositions(){
-  const r=RADIUS*0.6;
+  const r=PREDATOR_RADIUS*0.6;
   const a1=-Math.PI/2, a2=Math.PI/2;
   const cfg1=SNAKE_CONFIGS[p1Snake];
   const cfg2=SNAKE_CONFIGS[p2Snake];
@@ -903,7 +884,7 @@ function handleInput(){
 document.addEventListener('keydown',e=>{ keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault(); });
 document.addEventListener('keyup',e=>{ keys[e.key]=false; });
 function drawArena(){
-  const r=(stwActive&&STW_RADIUS)?STW_RADIUS:RADIUS;
+  const r=(stwActive&&STW_RADIUS)?STW_RADIUS:(gameActive?PREDATOR_RADIUS:RADIUS);
   const grad=ctx.createRadialGradient(CX,CY,r*.7,CX,CY,r);
   grad.addColorStop(0,'rgba(0,30,60,0)'); grad.addColorStop(1,'rgba(0,80,180,.12)');
   ctx.beginPath(); ctx.arc(CX,CY,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
@@ -1207,13 +1188,13 @@ function endTRGame(){
 // MODE 3 — SHRINK TO WIN
 // =========================================================
 const STW_INIT_LENGTH = 40; // Decreased from 60
-const STW_PLAYER_INIT_LENGTH = 80;
+const STW_PLAYER_INIT_LENGTH = 120; // Increased from 80
 const STW_TARGET_LENGTH = 1;
 const STW_FOOD_RADIUS = 11;
-const STW_FOOD_SHRINK = -2;
+const STW_FOOD_SHRINK = -4; // Changed from -2
 const STW_GRAVITY_DURATION = 5000;
 const STW_RIVAL_DURATION   = 5000;
-const STW_RIVAL_SHRINK     = -3;
+const STW_RIVAL_SHRINK     = -4; // Changed from -3 for consistency
 const STW_TELEPORT_COOLDOWN = 2000;
 const STW_BLACKHOLE_DURATION = 5000;
 const STW_HUNTER_DURATION = 5000;
@@ -1327,8 +1308,7 @@ class GravityZone {
     this.r=40; this.alive=true;
     this.spawnTime=Date.now();
     if(targetSnake && targetSnake.alive && targetSnake.segments.length > 0){
-      const segs = targetSnake.segments;
-      const seg = segs[Math.floor(Math.random() * segs.length)];
+      const seg = targetSnake.segments[0]; // Spawns directly on the head
       this.x = seg.x; this.y = seg.y;
     } else {
       this.x = CX; this.y = CY;
@@ -1844,12 +1824,19 @@ function stwGameLoop(){
       el.style.color = '#f0a';
       el.classList.remove('hidden');
       setTimeout(()=>el.classList.add('hidden'),1200);
+      gz.alive = false; // Destroy instantly
     }
     if(stwBotSnake&&gz.contains(stwBotSnake.x,stwBotSnake.y)){
       stwBotSnake.teleportRandom();
       stwBotTargetFood=null;
+      gz.alive = false; // Destroy instantly
     }
-    stwRivals.forEach(rv=>{ if(gz.contains(rv.x,rv.y)) rv.teleportRandom(); });
+    stwRivals.forEach(rv=>{ 
+      if(gz.contains(rv.x,rv.y)) {
+        rv.teleportRandom(); 
+        gz.alive = false; // Destroy instantly
+      } 
+    });
   });
 
   // Food Interactions
