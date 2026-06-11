@@ -265,7 +265,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div id="tr-hud">
       <div class="tr-box">
         <div class="tr-label p1" id="tr-p1-name">⚡ SPECTER</div>
-        <div class="tr-len p1" id="tr-p1-len">20</div>
+        <div class="tr-len p1" id="tr-p1-len">50</div>
         <div class="tr-segs" id="tr-p1-segs"></div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;margin-top:40px;">
@@ -273,7 +273,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       </div>
       <div class="tr-box" style="align-items:flex-end">
         <div class="tr-label p2" id="tr-p2-name">🤖 BOT</div>
-        <div class="tr-len p2" id="tr-p2-len">20</div>
+        <div class="tr-len p2" id="tr-p2-len">50</div>
         <div class="tr-segs" id="tr-p2-segs"></div>
       </div>
     </div>
@@ -332,8 +332,8 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="neon-title" style="font-size:clamp(20px,4vw,36px)">HOW TO PLAY</div>
     <div class="instructions-box">
       <h2>✂️ MODE 1 — TAIL REMOVAL</h2>
-      <p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−2 length) and avoid green food which grows you (+3 length).</p>
-      <li>Food is player-specific: you can only eat your own food and will pass right through your opponent's</li>
+      <p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p>
+      <li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li>
       <li>Food spawns ahead of your snake — you have 2 seconds to react</li>
       <li>After 2 seconds food disappears and new food spawns</li>
       <li>First to reach length 1 wins!</li>
@@ -387,13 +387,14 @@ const GC = document.getElementById('game');
 const bgCtx = BG.getContext('2d');
 const ctx   = GC.getContext('2d');
 
-let W, H, CX, CY, RADIUS, PREDATOR_RADIUS;
+let W, H, CX, CY, RADIUS, PREDATOR_RADIUS, TR_RADIUS;
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
   BG.width = GC.width = W; BG.height = GC.height = H;
   CX = W/2; CY = H/2;
   RADIUS = Math.min(W,H)*0.42;
   PREDATOR_RADIUS = RADIUS * 1.0723805; // 15% Area Increase for Predator Mode
+  TR_RADIUS = RADIUS * 1.11803398875; // 25% Area Increase for Tail Removal Mode
 }
 resize();
 window.addEventListener('resize',()=>{ resize(); if(gameActive) initPositions(); });
@@ -489,7 +490,7 @@ function showAboutMode() {
   if (gameActive) {
     box.innerHTML = `<h2>⚔️ MODE 2 — PREDATOR</h2><p>Fight inside a circular arena. Reduce your opponent's 15 HP to zero to win.</p><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>Hitting the arena wall slows you briefly</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
   } else if (trActive) {
-    box.innerHTML = `<h2>✂️ MODE 1 — TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−2 length) and avoid green food which grows you (+3 length).</p><li>Food is player-specific: you can only eat your own food and will pass right through your opponent's</li><li>Food spawns ahead of your snake — you have 2 seconds to react</li><li>After 2 seconds food disappears and new food spawns</li><li>First to reach length 1 wins!</li>`;
+    box.innerHTML = `<h2>✂️ MODE 1 — TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p><li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li><li>Food spawns ahead of your snake — you have 2 seconds to react</li><li>After 2 seconds food disappears and new food spawns</li><li>First to reach length 1 wins!</li>`;
   } else if (stwActive) {
     box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Use the minimap (bottom-right) to track the full arena</li>`;
   }
@@ -884,7 +885,7 @@ function handleInput(){
 document.addEventListener('keydown',e=>{ keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault(); });
 document.addEventListener('keyup',e=>{ keys[e.key]=false; });
 function drawArena(){
-  const r=(stwActive&&STW_RADIUS)?STW_RADIUS:(gameActive?PREDATOR_RADIUS:RADIUS);
+  const r=(stwActive&&STW_RADIUS)?STW_RADIUS:(gameActive?PREDATOR_RADIUS:(trActive?TR_RADIUS:RADIUS));
   const grad=ctx.createRadialGradient(CX,CY,r*.7,CX,CY,r);
   grad.addColorStop(0,'rgba(0,30,60,0)'); grad.addColorStop(1,'rgba(0,80,180,.12)');
   ctx.beginPath(); ctx.arc(CX,CY,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
@@ -918,20 +919,24 @@ function endPredatorGame(){
 // =========================================================
 // MODE 1 — TAIL REMOVAL
 // =========================================================
-const TR_INIT_LENGTH=20;
+const TR_INIT_LENGTH=50;
 const TR_FOOD_LIFETIME=2000;
 const TR_FOOD_AHEAD_DIST=80;
 
 const TR_DIFF={
-  easy:{reactionMs:900,decisionInterval:70,goodFoodChance:0.45,wrongFoodChance:0.35,turnSpeed:0.55,redEffect:-3,greenEffect:2},
-  medium:{reactionMs:450,decisionInterval:30,goodFoodChance:0.72,wrongFoodChance:0.18,turnSpeed:0.80,redEffect:-2,greenEffect:3},
-  hard:{reactionMs:120,decisionInterval:8,goodFoodChance:0.95,wrongFoodChance:0.04,turnSpeed:1.0,redEffect:-1,greenEffect:4}
+  easy:{reactionMs:900,decisionInterval:70,goodFoodChance:0.45,wrongFoodChance:0.35,turnSpeed:0.55,redEffect:-5,greenEffect:4},
+  medium:{reactionMs:450,decisionInterval:30,goodFoodChance:0.72,wrongFoodChance:0.18,turnSpeed:0.80,redEffect:-4,greenEffect:5},
+  hard:{reactionMs:120,decisionInterval:8,goodFoodChance:0.95,wrongFoodChance:0.04,turnSpeed:1.0,redEffect:-3,greenEffect:6}
 };
+
+const trCam = { x: 0, y: 0 };
+const TR_CAM_LERP = 0.08;
 
 class TRSnake {
   constructor(cfg,x,y,angle,isBot){
     this.x=x; this.y=y; this.angle=angle; this.isBot=isBot;
-    this.speed=2.3; this.turnSpeed=cfg.turnSpeed||0.07;
+    this.speed=4.3; 
+    this.turnSpeed=cfg.turnSpeed||0.07;
     this.color=isBot?'#f0a':'#0ff'; this.glow=isBot?'#f04':'#0af';
     this.length=TR_INIT_LENGTH; this.segments=[];
     this.wallSlowTimer=0; this.alive=true; this.foodEaten=0;
@@ -955,7 +960,7 @@ class TRSnake {
     let nx=this.x+Math.cos(this.angle)*spd;
     let ny=this.y+Math.sin(this.angle)*spd;
     const dist=Math.hypot(nx-CX,ny-CY);
-    if(dist>RADIUS-SEGMENT_SIZE){
+    if(dist>TR_RADIUS-SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.4;
       nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
@@ -1023,7 +1028,7 @@ function startTailRemoval(){
   const p2Name=trGameMode==='local'?(botType==='small'?'⚡ SPECTER':'💥 LEVIATHAN'):(botType==='small'?'🤖 SPECTER BOT':'🤖 LEVIATHAN BOT');
   document.getElementById('tr-p2-name').textContent=p2Name;
   const dc=TR_DIFF[trDiff];
-  const r=RADIUS*0.6; const a1=-Math.PI/2, a2=Math.PI/2;
+  const r=TR_RADIUS*0.6; const a1=-Math.PI/2, a2=Math.PI/2;
   trSnake1=new TRSnake({turnSpeed:0.07},CX+Math.cos(a1)*r,CY+Math.sin(a1)*r,a2+.3,false);
   const p2Turn=trGameMode==='local'?0.07:dc.turnSpeed;
   trSnake2=new TRSnake({turnSpeed:p2Turn},CX+Math.cos(a2)*r,CY+Math.sin(a2)*r,a1-.3,trGameMode==='bot');
@@ -1032,6 +1037,10 @@ function startTailRemoval(){
   trFoods=[]; trActive=true; trStartTime=Date.now();
   trBot.actionFrame=0; trBot.lastDecisionFrame=0; trBot.targetFood=null; trBot.reactionDelay=0; trBot.lastFoodSeen=null;
   particles=[]; initBgParticles();
+  
+  trCam.x = trSnake1.x;
+  trCam.y = trSnake1.y;
+
   const isMobile='ontouchstart' in window;
   document.getElementById('tr-joystick-left').classList.toggle('hidden',!isMobile);
   document.getElementById('tr-joystick-right').classList.toggle('hidden',!(isMobile&&trGameMode==='local'));
@@ -1048,7 +1057,7 @@ function spawnTRFood(snake,owner){
   const perp=snake.angle+Math.PI/2*(Math.random()<0.5?1:-1);
   fx+=Math.cos(perp)*(Math.random()*40); fy+=Math.sin(perp)*(Math.random()*40);
   const d=Math.hypot(fx-CX,fy-CY);
-  if(d>RADIUS*0.88){ const a=Math.atan2(fy-CY,fx-CX); fx=CX+Math.cos(a)*(RADIUS*0.82); fy=CY+Math.sin(a)*(RADIUS*0.82); }
+  if(d>TR_RADIUS*0.88){ const a=Math.atan2(fy-CY,fx-CX); fx=CX+Math.cos(a)*(TR_RADIUS*0.82); fy=CY+Math.sin(a)*(TR_RADIUS*0.82); }
   const foodType=Math.random()<0.6?'red':'green';
   const f=new TRFood(fx,fy,foodType); f.owner=owner; trFoods.push(f);
 }
@@ -1057,15 +1066,29 @@ function trGameLoop(){
   if(isPaused){ trAnimFrame=requestAnimationFrame(trGameLoop); return; }
   const now=Date.now();
   updateShake();
+
+  trCam.x += (trSnake1.x - trCam.x) * TR_CAM_LERP;
+  trCam.y += (trSnake1.y - trCam.y) * TR_CAM_LERP;
+  const camOffX = CX - trCam.x;
+  const camOffY = CY - trCam.y;
+
   ctx.save(); ctx.translate(shakeX,shakeY);
   ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
+
+  ctx.save();
+  ctx.translate(camOffX, camOffY);
+
   drawArena(); trHandleInput();
   if(trGameMode==='bot') trBotThink(now);
   trSnake1.update(); trSnake2.update();
   trCheckFoodCollision(now); trManageFoods(now);
   updateParticles(); trSnake1.draw(); trSnake2.draw();
   trFoods.forEach(f=>{ if(f.alive){ const rem=Math.max(0,1-(now-f.spawnTime)/TR_FOOD_LIFETIME); f.draw(rem); }});
-  drawParticles(); ctx.restore();
+  drawParticles(); 
+  
+  ctx.restore(); // restore camera
+  ctx.restore(); // restore shake
+
   const pf=trFoods.find(f=>f.owner==='p1'&&f.alive);
   if(pf){
     const rem=Math.max(0,1-(now-pf.spawnTime)/TR_FOOD_LIFETIME);
@@ -1100,8 +1123,11 @@ function trHandleInput(){
 function trBotThink(now){
   const dc=TR_DIFF[trDiff]; trBot.actionFrame++;
   const head=trSnake2.segments[0];
-  const wallDist=RADIUS-Math.hypot(head.x-CX,head.y-CY);
-  const botFood=trFoods.find(f=>f.owner==='p2'&&f.alive);
+  const wallDist=TR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  
+  let botFood=null, nd=Infinity;
+  trFoods.forEach(f=>{ if(f.alive){ const d=Math.hypot(head.x-f.x,head.y-f.y); if(d<nd){nd=d;botFood=f;} }});
+
   if(botFood&&botFood!==trBot.lastFoodSeen){ trBot.lastFoodSeen=botFood; trBot.reactionDelay=now+dc.reactionMs; trBot.targetFood=null; }
   if(botFood&&now>=trBot.reactionDelay){
     if(trBot.targetFood===null){
@@ -1115,7 +1141,7 @@ function trBotThink(now){
 }
 function trBotExecuteMove(botFood,wallDist,dc){
   const head=trSnake2.segments[0];
-  if(wallDist<RADIUS*0.18){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; trSnake2.turn(Math.sign(da)*1.0); return; }
+  if(wallDist<TR_RADIUS*0.18){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; trSnake2.turn(Math.sign(da)*1.0); return; }
   if(trBot.targetFood&&trBot.targetFood.alive){
     const a=Math.atan2(trBot.targetFood.y-head.y,trBot.targetFood.x-head.x);
     let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
@@ -1134,16 +1160,20 @@ function trCheckFoodCollision(now){
   const dc=TR_DIFF[trDiff];
   trFoods.forEach(f=>{
     if(!f.alive) return;
-    const snake=f.owner==='p1'?trSnake1:trSnake2;
-    const head=snake.segments[0];
-    if(Math.hypot(head.x-f.x,head.y-f.y)<SEGMENT_SIZE+f.r){
+    const head1=trSnake1.segments[0];
+    const head2=trSnake2.segments[0];
+    let eater = null;
+    if(Math.hypot(head1.x-f.x,head1.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake1;
+    else if(Math.hypot(head2.x-f.x,head2.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake2;
+    
+    if(eater){
       f.alive=false;
       let delta;
-      if(f.owner==='p1') delta=f.type==='red'?-2:3;
-      else delta=trGameMode==='local'?(f.type==='red'?-2:3):(f.type==='red'?dc.redEffect:dc.greenEffect);
-      snake.setLength(snake.length+delta); snake.foodEaten++;
+      if(eater===trSnake1) delta=f.type==='red'?-4:5;
+      else delta=trGameMode==='local'?(f.type==='red'?-4:5):(f.type==='red'?dc.redEffect:dc.greenEffect);
+      eater.setLength(eater.length+delta); eater.foodEaten++;
       addParticles(f.x,f.y,f.type==='red'?'#f44':'#4f4',16); triggerShake();
-      setTimeout(()=>{ if(trActive) spawnTRFood(snake,f.owner); },300);
+      setTimeout(()=>{ if(trActive) spawnTRFood(f.owner==='p1'?trSnake1:trSnake2, f.owner); },300);
     }
   });
   trFoods=trFoods.filter(f=>f.alive);
