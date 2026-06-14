@@ -46,12 +46,12 @@ canvas{display:block;position:absolute;top:0;left:0}
 .match-status{font-size:clamp(14px,2.5vw,20px);color:#0af;letter-spacing:4px;animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.4}}
 .timer{font-size:clamp(30px,6vw,60px);color:#0ff;font-weight:700;text-shadow:0 0 20px #0ff}
-.result-title{font-size:clamp(28px,6vw,60px);font-weight:900;letter-spacing:6px;margin-bottom:16px}
+.result-title{font-size:clamp(28px,6vw,60px);font-weight:900;letter-spacing:6px;margin-bottom:16px;text-align:center;}
 .result-win{color:#0f8;text-shadow:0 0 20px #0f8}
 .result-lose{color:#f04;text-shadow:0 0 20px #f04}
 .result-neutral{color:#0ff;text-shadow:0 0 20px #0ff}
 .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin:16px 0;font-size:13px;color:#8af}
-.stats-grid span{color:#0ff}
+.stats-grid span{color:#0ff;text-align:right;}
 .joystick-zone{position:absolute;bottom:20px;pointer-events:auto}
 .joystick-zone.left{left:20px}
 .joystick-zone.right{right:20px}
@@ -137,7 +137,6 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="menu-group">
       <button class="btn" onclick="showScreen('screen-snake-select'); setupMode('bot')">🤖 VS BOT</button>
       <button class="btn" onclick="showScreen('screen-snake-select'); setupMode('local')">👥 LOCAL 2P</button>
-      <button class="btn" onclick="showScreen('screen-matchmaking'); startMatchmaking()">🌐 ONLINE</button>
       <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
     </div>
   </div>
@@ -242,17 +241,29 @@ canvas{display:block;position:absolute;top:0;left:0}
 
   <div id="screen-game" class="screen hidden" style="pointer-events:none">
     <div class="hbar-wrap" style="pointer-events:none">
-      <div class="hbar-box">
+      <div class="hbar-box" style="align-items:flex-start">
         <div class="hbar-label p1" id="specter-name">⚡ SPECTER</div>
         <div class="hbar-bg"><div class="hbar-fill p1" id="hp-bar-specter" style="width:100%"></div></div>
-        <div class="hbar-hp p1" id="hp-text-specter">15</div>
+        <div class="hbar-hp p1" id="hp-text-specter">15/15</div>
+        <div style="font-size:11px; color:#8af; letter-spacing:2px; margin-top:2px;">WINS: <span id="p1-wins-text" style="color:#fff">0</span></div>
       </div>
       <div class="hbar-box" style="align-items:flex-end">
         <div class="hbar-label p2" id="leviathan-name">💥 LEVIATHAN</div>
         <div class="hbar-bg"><div class="hbar-fill p2" id="hp-bar-leviathan" style="width:100%"></div></div>
-        <div class="hbar-hp p2" id="hp-text-leviathan">15</div>
+        <div class="hbar-hp p2" id="hp-text-leviathan">15/15</div>
+        <div style="font-size:11px; color:#8af; letter-spacing:2px; margin-top:2px;">WINS: <span id="p2-wins-text" style="color:#fff">0</span></div>
       </div>
     </div>
+
+    <div id="predator-round-hud" style="position:absolute; top:45px; width:100%; text-align:center; pointer-events:none;">
+      <div id="predator-round-label" style="font-size:14px; color:#0af; letter-spacing:4px; font-weight:bold;">ROUND 1</div>
+    </div>
+
+    <div id="predator-transition" class="hidden" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); text-align:center; z-index:100; background:rgba(6,9,20,0.9); padding:30px 50px; border:1px solid #0af; border-radius:8px; box-shadow:0 0 20px rgba(0,170,255,0.4);">
+      <div id="trans-title" class="neon-title" style="font-size:clamp(20px,5vw,40px); animation:none;">ROUND 1</div>
+      <div id="trans-sub" class="subtitle" style="font-size:clamp(12px,3vw,20px); margin-top:12px; color:#fff;">START</div>
+    </div>
+
     <div id="joystick-left" class="joystick-zone left hidden">
       <div class="joystick-outer" id="joy-outer-l"><div class="joystick-inner" id="joy-inner-l"></div></div>
     </div>
@@ -338,7 +349,8 @@ canvas{display:block;position:absolute;top:0;left:0}
       <li>After 2 seconds food disappears and new food spawns</li>
       <li>First to reach length 1 wins!</li>
       <h2>⚔️ MODE 2 — PREDATOR</h2>
-      <p>Fight inside a circular arena. Reduce your opponent's 15 HP to zero to win.</p>
+      <p>Fight inside a circular arena. Play a Best-of-3 Round System.</p>
+      <li>Rounds 1 & 2: 15 HP each. Round 3 (Tiebreaker): 10 HP each.</li>
       <li>Hit opponent's body with your head to deal damage (−1 HP)</li>
       <li>Hitting the arena wall slows you briefly</li>
       <li>You cannot collide head-to-head — use your body as a weapon</li>
@@ -393,7 +405,7 @@ function resize() {
   BG.width = GC.width = W; BG.height = GC.height = H;
   CX = W/2; CY = H/2;
   RADIUS = Math.min(W,H)*0.42;
-  PREDATOR_RADIUS = RADIUS * 1.0723805; // 15% Area Increase for Predator Mode
+  PREDATOR_RADIUS = RADIUS * 1.018761475; // Decreased by ~5% from original 15% increase
   TR_RADIUS = RADIUS * 1.11803398875; // 25% Area Increase for Tail Removal Mode
 }
 resize();
@@ -460,7 +472,7 @@ function resumeGame() {
   }
   isPaused = false;
   document.getElementById('screen-pause').classList.add('hidden');
-  document.getElementById('btn-pause').classList.remove('hidden');
+  if(!inTransition) document.getElementById('btn-pause').classList.remove('hidden');
 }
 
 function restartCurrentGame() {
@@ -488,7 +500,7 @@ function showAboutMode() {
   const box = document.getElementById('pause-about-box');
   box.classList.remove('hidden');
   if (gameActive) {
-    box.innerHTML = `<h2>⚔️ MODE 2 — PREDATOR</h2><p>Fight inside a circular arena. Reduce your opponent's 15 HP to zero to win.</p><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>Hitting the arena wall slows you briefly</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
+    box.innerHTML = `<h2>⚔️ MODE 2 — PREDATOR</h2><p>Fight inside a circular arena. Play a Best-of-3 Round System.</p><li>Rounds 1 & 2: 15 HP each. Round 3 (Tiebreaker): 10 HP each.</li><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>Hitting the arena wall slows you briefly</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
   } else if (trActive) {
     box.innerHTML = `<h2>✂️ MODE 1 — TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p><li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li><li>Food spawns ahead of your snake — you have 2 seconds to react</li><li>After 2 seconds food disappears and new food spawns</li><li>First to reach length 1 wins!</li>`;
   } else if (stwActive) {
@@ -535,27 +547,10 @@ function setDiff(d,btn){
   btn.classList.add('active');
 }
 
-let matchInterval;
-function startMatchmaking(){
-  let t=60;
-  document.getElementById('match-timer').textContent=t;
-  document.getElementById('match-status').textContent='SEARCHING FOR OPPONENT...';
-  matchInterval=setInterval(()=>{
-    t--; document.getElementById('match-timer').textContent=t;
-    if(t<=0){
-      clearInterval(matchInterval);
-      document.getElementById('match-status').textContent='MATCHMAKING FAILED. TRY AGAIN LATER.';
-      document.getElementById('match-timer').textContent='';
-      setTimeout(()=>showScreen('screen-predator-modes'),2500);
-    }
-  },1000);
-}
-function cancelMatchmaking(){ clearInterval(matchInterval); showScreen('screen-predator-modes'); }
-
 const SEGMENT_SIZE=8;
 const SNAKE_CONFIGS={
-  small:{ length:34, speed:2.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
-  big:  { length:34, speed:2.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
+  small:{ length:24, speed:3.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
+  big:  { length:24, speed:3.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 
 class Snake {
@@ -655,6 +650,10 @@ let gameStartTime=0;
 let inputDir1={x:0,y:0}, inputDir2={x:0,y:0};
 let bgParticles=[];
 let animFrame=null;
+
+// Predator Best-of-3 Variables
+let predRound = 1, predP1Wins = 0, predP2Wins = 0;
+let inTransition = false;
 
 const bot={
   actionFrame:0,lastDecisionFrame:0,state:'wander',stateTimer:0,
@@ -795,42 +794,78 @@ function initPositions(){
 }
 function startGame(){
   showScreen('screen-game');
-  document.getElementById('btn-pause').classList.remove('hidden');
-  if(gameMode==='bot'){
-    document.getElementById('specter-name').textContent=p2Snake==='small'?'🤖 SPECTER BOT':'⚡ SPECTER';
-    document.getElementById('leviathan-name').textContent=p2Snake==='big'?'🤖 LEVIATHAN BOT':'💥 LEVIATHAN';
-  } else {
-    document.getElementById('specter-name').textContent='⚡ SPECTER';
-    document.getElementById('leviathan-name').textContent='💥 LEVIATHAN';
-  }
-  initPositions(); initBgParticles();
-  gameActive=true; particles=[]; finalSlowMo=false; finalSlowMoFrames=0;
-  gameStartTime=Date.now(); updateHpBars();
-  const isMobile='ontouchstart' in window;
-  document.getElementById('joystick-left').classList.toggle('hidden',!isMobile);
-  document.getElementById('joystick-right').classList.toggle('hidden',!isMobile||gameMode!=='local');
-  if(isMobile) setupJoysticks();
-  if(animFrame) cancelAnimationFrame(animFrame);
-  animFrame=null;
-  gameLoop();
+  initBgParticles();
+  predRound = 1; predP1Wins = 0; predP2Wins = 0;
+  startPredatorRound();
 }
 function restartGame(){
   showScreen('screen-game');
-  document.getElementById('btn-pause').classList.remove('hidden');
-  initPositions(); gameActive=true; particles=[];
-  finalSlowMo=false; finalSlowMoFrames=0;
-  gameStartTime=Date.now(); updateHpBars();
-  if(animFrame) cancelAnimationFrame(animFrame);
-  animFrame=null;
-  gameLoop();
+  predRound = 1; predP1Wins = 0; predP2Wins = 0;
+  startPredatorRound();
 }
+
+function startPredatorRound() {
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+
+  const maxHp = (predRound === 3) ? 10 : 15;
+  initPositions();
+  snake1.maxHp = maxHp; snake1.hp = maxHp;
+  snake2.maxHp = maxHp; snake2.hp = maxHp;
+
+  // Setup Names & Colors
+  const n1 = p1Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN';
+  let n2 = p2Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN';
+  if(gameMode === 'bot') n2 = p2Snake === 'small' ? '🤖 SPECTER BOT' : '🤖 LEVIATHAN BOT';
+  
+  document.getElementById('specter-name').textContent = p1Snake === 'small' ? n1 : n2;
+  document.getElementById('leviathan-name').textContent = p1Snake === 'big' ? n1 : n2;
+
+  updateHpBars();
+  document.getElementById('predator-round-label').textContent = predRound === 3 ? 'FINAL ROUND' : 'ROUND ' + predRound;
+  document.getElementById('p1-wins-text').textContent = predP1Wins;
+  document.getElementById('p2-wins-text').textContent = predP2Wins;
+
+  gameActive = false;
+  inTransition = true;
+  document.getElementById('joystick-left').classList.add('hidden');
+  document.getElementById('joystick-right').classList.add('hidden');
+  document.getElementById('btn-pause').classList.add('hidden');
+
+  const trans = document.getElementById('predator-transition');
+  trans.classList.remove('hidden');
+  document.getElementById('trans-title').textContent = predRound === 3 ? 'FINAL ROUND' : 'ROUND ' + predRound;
+  document.getElementById('trans-sub').textContent = 'START';
+
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+  drawArena();
+  snake1.draw(); snake2.draw();
+  ctx.restore();
+
+  setTimeout(() => {
+    if(currentScreen !== 'screen-game') return; // Prevent bugs if exited early
+    trans.classList.add('hidden');
+    gameActive = true;
+    inTransition = false;
+    particles = []; finalSlowMo = false; finalSlowMoFrames = 0;
+    document.getElementById('btn-pause').classList.remove('hidden');
+
+    const isMobile = 'ontouchstart' in window;
+    document.getElementById('joystick-left').classList.toggle('hidden', !isMobile);
+    document.getElementById('joystick-right').classList.toggle('hidden', !isMobile || gameMode !== 'local');
+    if(isMobile) setupJoysticks();
+
+    if(!animFrame) { gameStartTime = Date.now(); gameLoop(); }
+  }, 2000);
+}
+
 function updateHpBars(){
   const sp=Math.max(0,specterSnake.hp/specterSnake.maxHp)*100;
   document.getElementById('hp-bar-specter').style.width=sp+'%';
-  document.getElementById('hp-text-specter').textContent=Math.max(0,specterSnake.hp);
+  document.getElementById('hp-text-specter').textContent=`${Math.max(0,specterSnake.hp)}/${specterSnake.maxHp}`;
   const lp=Math.max(0,leviathanSnake.hp/leviathanSnake.maxHp)*100;
   document.getElementById('hp-bar-leviathan').style.width=lp+'%';
-  document.getElementById('hp-text-leviathan').textContent=Math.max(0,leviathanSnake.hp);
+  document.getElementById('hp-text-leviathan').textContent=`${Math.max(0,leviathanSnake.hp)}/${leviathanSnake.maxHp}`;
 }
 function checkHit(attacker,defender){
   if(attacker.hitCooldown>0) return;
@@ -859,11 +894,79 @@ function gameLoop(){
   snake1.update(); snake2.update();
   checkHit(snake1,snake2); checkHit(snake2,snake1);
   updateParticles();
-  if(finalSlowMo){ finalSlowMoFrames--; if(finalSlowMoFrames<=0){ ctx.restore(); endPredatorGame(); return; } }
+  if(finalSlowMo){ 
+    finalSlowMoFrames--; 
+    if(finalSlowMoFrames<=0){ 
+      ctx.restore(); 
+      handleRoundEnd(); 
+      return; 
+    } 
+  }
   snake1.draw(); snake2.draw(); drawParticles();
   ctx.restore();
   animFrame=requestAnimationFrame(gameLoop);
 }
+
+function handleRoundEnd() {
+  gameActive = false;
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  
+  document.getElementById('btn-pause').classList.add('hidden');
+  document.getElementById('joystick-left').classList.add('hidden');
+  document.getElementById('joystick-right').classList.add('hidden');
+  
+  const p1WinsRound = snake2.hp <= 0;
+  if (p1WinsRound) predP1Wins++;
+  else predP2Wins++;
+
+  const trans = document.getElementById('predator-transition');
+  trans.classList.remove('hidden');
+
+  let winnerLabel = "";
+  if (gameMode === 'bot') {
+      if (p1WinsRound) winnerLabel = p1Snake==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
+      else winnerLabel = '🤖 BOT';
+  } else {
+      winnerLabel = p1WinsRound ? 'P1 '+(p1Snake==='small'?'SPECTER':'LEVIATHAN') : 'P2 '+(p2Snake==='small'?'SPECTER':'LEVIATHAN');
+  }
+
+  document.getElementById('trans-title').textContent = predRound === 3 ? 'FINAL ROUND OVER' : 'ROUND ' + predRound + ' OVER';
+  document.getElementById('trans-sub').textContent = 'Winner: ' + winnerLabel;
+
+  document.getElementById('p1-wins-text').textContent = predP1Wins;
+  document.getElementById('p2-wins-text').textContent = predP2Wins;
+
+  setTimeout(() => {
+     if (predP1Wins === 2 || predP2Wins === 2) {
+         endPredatorMatch();
+     } else {
+         predRound++;
+         startPredatorRound();
+     }
+  }, 2500);
+}
+
+function endPredatorMatch() {
+  document.getElementById('predator-transition').classList.add('hidden');
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  gameActive=false;
+
+  const p1WinsMatch = predP1Wins === 2;
+  let matchWinnerLabel;
+  
+  if (gameMode === 'bot') {
+    matchWinnerLabel = p1WinsMatch ? (p1Snake==='small'?'⚡ SPECTER':'💥 LEVIATHAN') + ' WINS THE MATCH!' : '🤖 BOT WINS THE MATCH!';
+  } else {
+    matchWinnerLabel = p1WinsMatch ? 'P1 '+(p1Snake==='small'?'SPECTER':'LEVIATHAN') + ' WINS THE MATCH!' : 'P2 '+(p2Snake==='small'?'SPECTER':'LEVIATHAN') + ' WINS THE MATCH!';
+  }
+
+  const score = p1WinsMatch ? `2-${predP2Wins}` : `${predP1Wins}-2`;
+
+  showResultScreen(matchWinnerLabel, p1WinsMatch,
+    `<div style="grid-column:1/-1; text-align:center; font-size:24px; font-weight:bold; color:#0ff; text-shadow:0 0 10px #0af;">Final Score: ${score}</div>`,
+    'predator');
+}
+
 function handleInput(){
   if(keys['a']||keys['A']) snake1.turn(-1);
   if(keys['d']||keys['D']) snake1.turn(1);
@@ -899,21 +1002,6 @@ function drawArena(){
     ctx.beginPath(); ctx.arc(CX+Math.cos(a)*r*.5,CY+Math.sin(a)*r*.5,r*.12,0,Math.PI*2);
     ctx.fillStyle='#0af'; ctx.fill(); ctx.restore();
   }
-}
-function endPredatorGame(){
-  document.getElementById('btn-pause').classList.add('hidden');
-  cancelAnimationFrame(animFrame); animFrame=null; gameActive=false;
-  const specterWins=leviathanSnake.hp<=0;
-  const elapsed=Math.round((Date.now()-gameStartTime)/1000);
-  let winnerLabel;
-  if(gameMode==='bot'){
-    if(specterWins) winnerLabel=p1Snake==='small'?'⚡ SPECTER WINS!':'🤖 SPECTER BOT WINS!';
-    else winnerLabel=p1Snake==='big'?'💥 LEVIATHAN WINS!':'🤖 LEVIATHAN BOT WINS!';
-  } else { winnerLabel=specterWins?'⚡ SPECTER WINS!':'💥 LEVIATHAN WINS!'; }
-  const w=specterWins?specterSnake:leviathanSnake;
-  showResultScreen(winnerLabel,specterWins,
-    `<div>Hits Landed</div><span>${w.hits}</span><div>Damage Dealt</div><span>${w.dmgDealt}</span><div>Match Time</div><span>${elapsed}s</span><div>Winner HP Left</div><span>${Math.max(0,w.hp)}</span>`,
-    'predator');
 }
 
 // =========================================================
