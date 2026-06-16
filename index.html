@@ -144,6 +144,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="menu-group">
       <button class="btn" onclick="setupSTWSelect('bot')">🤖 PLAY WITH BOT</button>
       <button class="btn" onclick="setupSTWSelect('self')">🧘 PLAY WITH SELF</button>
+      <button class="btn" onclick="setupSTWSelect('local')">👥 LOCAL 2P</button>
       <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
     </div>
   </div>
@@ -323,6 +324,9 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div id="stw-joystick-left" class="joystick-zone left hidden">
       <div class="joystick-outer" id="stw-joy-outer-l"><div class="joystick-inner" id="stw-joy-inner-l"></div></div>
     </div>
+    <div id="stw-joystick-right" class="joystick-zone right hidden">
+      <div class="joystick-outer" id="stw-joy-outer-r"><div class="joystick-inner" id="stw-joy-inner-r"></div></div>
+    </div>
   </div>
 
   <div id="screen-result" class="screen hidden">
@@ -347,7 +351,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <h2>⚔️ MODE 2 — PREDATOR</h2>
       <p>Fight inside a circular arena. Play a Best-of-3 Round System.</p>
       <li>Rounds 1 & 2: 15 HP each. Round 3 (Tiebreaker): 10 HP each.</li>
-      <li>Hit opponent's body with your head to deal damage (−1 HP)</li>
+      <li>Hit opponent's body with your head to deal damage (−1 HP) / length decrease</li>
       <li>Hitting the arena wall slows you briefly</li>
       <li>You cannot collide head-to-head — use your body as a weapon</li>
       <h2>🌀 MODE 3 — SHRINK TO WIN</h2>
@@ -359,7 +363,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <li>Hurdles alternate, appearing for a brief duration followed by a wait</li>
       <h2>CONTROLS</h2>
       <li>Player 1: A / D keys to steer</li>
-      <li>Player 2 (local Predator): Arrow Left / Right to steer</li>
+      <li>Player 2 (local Predator/Shrink to Win): Arrow Left / Right to steer</li>
       <li>Mobile: On-screen virtual joystick</li>
       <h2>BOT DIFFICULTY</h2>
       <li>Easy — slow, random, makes mistakes often</li>
@@ -380,10 +384,6 @@ canvas{display:block;position:absolute;top:0;left:0}
         <span style="color:#8af;font-size:13px;letter-spacing:2px">SCREEN SHAKE</span>
         <button class="diff-btn active" id="toggle-shake" onclick="toggleSetting('shake')">ON</button>
       </div>
-      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
-        <span style="color:#8af;font-size:13px;letter-spacing:2px">TRAILS</span>
-        <button class="diff-btn active" id="toggle-trails" onclick="toggleSetting('trails')">ON</button>
-      </div>
     </div>
     <button class="btn btn-red" onclick="showScreen('screen-menu')">← BACK</button>
   </div>
@@ -400,13 +400,13 @@ function resize() {
   BG.width = GC.width = W; BG.height = GC.height = H;
   CX = W/2; CY = H/2;
   RADIUS = Math.min(W,H)*0.42;
-  PREDATOR_RADIUS = RADIUS * 1.018761475; // Decreased by ~5% from original 15% increase
-  TR_RADIUS = RADIUS * 1.11803398875; // 25% Area Increase for Tail Removal Mode
+  PREDATOR_RADIUS = RADIUS * 1.018761475; 
+  TR_RADIUS = RADIUS * 1.11803398875; 
 }
 resize();
 window.addEventListener('resize',()=>{ resize(); if(gameActive) initPositions(); });
 
-const settings = { particles:true, shake:true, trails:true };
+const settings = { particles:true, shake:true };
 function toggleSetting(k){
   settings[k]=!settings[k];
   document.getElementById('toggle-'+k).textContent=settings[k]?'ON':'OFF';
@@ -459,6 +459,7 @@ function resumeGame() {
     stwHurdleTimer += pauseDuration;
     if(stwPlayerSnake) stwPlayerSnake.lastTeleportTime += pauseDuration;
     if(stwBotSnake) stwBotSnake.lastTeleportTime += pauseDuration;
+    if(stwP2Snake) stwP2Snake.lastTeleportTime += pauseDuration;
     stwGravityZones.forEach(gz => gz.spawnTime += pauseDuration);
     stwBlackHoles.forEach(bh => bh.spawnTime += pauseDuration);
     stwHunters.forEach(h => h.spawnTime += pauseDuration);
@@ -500,6 +501,29 @@ function showAboutMode() {
     box.innerHTML = `<h2>✂️ MODE 1 — TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p><li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li><li>Food spawns ahead of your snake — you have 2 seconds to react</li><li>After 2 seconds food disappears and new food spawns</li><li>First to reach length 1 wins!</li>`;
   } else if (stwActive) {
     box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li>`;
+  }
+}
+
+// Solid collision physics logic added for Predator and Tail Removal
+function enforceSolidBodies(sA, sB, solidRatio) {
+  if(!sA || !sA.alive || !sB || !sB.alive) return;
+  let limitB = Math.floor(sB.segments.length * solidRatio);
+
+  for (let i = 0; i < limitB; i++) {
+    let s = sB.segments[i];
+    if(!s) continue;
+    let dist = Math.hypot(sA.x - s.x, sA.y - s.y);
+    let minDist = SEGMENT_SIZE * 1.8; // Collision boundary size
+    if (dist < minDist && dist > 0) {
+      let overlap = minDist - dist;
+      let angle = Math.atan2(sA.y - s.y, sA.x - s.x);
+      sA.x += Math.cos(angle) * overlap * 0.5;
+      sA.y += Math.sin(angle) * overlap * 0.5;
+      if(sA.segments[0]) {
+        sA.segments[0].x = sA.x;
+        sA.segments[0].y = sA.y;
+      }
+    }
   }
 }
 
@@ -554,7 +578,7 @@ class Snake {
     this.hp=cfg.hp; this.maxHp=cfg.hp;
     this.speed=cfg.speed; this.turnSpeed=cfg.turnSpeed;
     this.color=cfg.color; this.glow=cfg.glow;
-    this.segments=[]; this.trail=[];
+    this.segments=[];
     this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true;
     this.hits=0; this.dmgDealt=0;
     for(let i=0;i<cfg.length;i++)
@@ -580,24 +604,15 @@ class Snake {
     this.x=nx; this.y=ny;
     this.segments.unshift({x:this.x,y:this.y});
     while(this.segments.length>this.cfg.length) this.segments.pop();
-    if(settings.trails){ this.trail.push({x:this.x,y:this.y,a:1}); while(this.trail.length>40) this.trail.shift(); }
   }
   draw(){
     if(!this.alive) return;
-    if(settings.trails){
-      this.trail.forEach((t,i)=>{
-        ctx.save(); ctx.globalAlpha=t.a*(i/this.trail.length)*0.25;
-        ctx.beginPath(); ctx.arc(t.x,t.y,SEGMENT_SIZE*.5,0,Math.PI*2);
-        ctx.fillStyle=this.glow; ctx.fill(); ctx.restore();
-      });
-    }
     ctx.save(); ctx.shadowColor=this.glow; ctx.shadowBlur=16;
     for(let i=this.segments.length-1;i>=0;i--){
       const s=this.segments[i];
-      const t=1-i/this.segments.length;
-      const r=SEGMENT_SIZE*(0.4+t*0.7);
+      const r=SEGMENT_SIZE * 1.1; // Perfectly uniform width 
       ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
-      ctx.fillStyle=i===0?this.color:`rgba(${hexToRgb(this.color)},${t*.85})`;
+      ctx.fillStyle=this.color; // Perfectly uniform solid color
       ctx.fill();
     }
     if(this.hitCooldown>0&&this.hitCooldown%4<2){
@@ -702,7 +717,7 @@ function botThinkMedium(){
   const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
   const wallDist=PREDATOR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
   if(bot.feintTimer>0){ bot.feintTimer--; snake2.turn(bot.feintDir*0.9); if(bot.feintTimer===0) bot.state='attack'; return; }
-  const di=18+Math.floor(Math.random()*12);
+  const di=30+Math.floor(Math.random()*20); // Decreased difficulty (slower reaction)
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeMediumMove(dist,wallDist); return; }
   bot.lastDecisionFrame=bot.actionFrame;
   if(wallDist<PREDATOR_RADIUS*0.22){ bot.state='dodge'; bot.stateTimer=25; }
@@ -719,11 +734,11 @@ function executeMediumMove(dist,wallDist){
     snake2.turn(Math.sign(da)*0.85); return;
   }
   if(bot.state==='pursue'||bot.state==='attack'){
-    const tx=snake1.x+Math.cos(snake1.angle)*snake1.speed*8;
-    const ty=snake1.y+Math.sin(snake1.angle)*snake1.speed*8;
+    const tx=snake1.x+Math.cos(snake1.angle)*snake1.speed*3; // Decreased prediction
+    const ty=snake1.y+Math.sin(snake1.angle)*snake1.speed*3;
     const a=Math.atan2(ty-head.y,tx-head.x);
     let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.25)*Math.min(1.0,Math.abs(da)*1.2));
+    snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.5)*Math.min(0.8,Math.abs(da)*1.0)); // Decreased tracking precision
   } else if(bot.state==='wander'){ applyWander(); }
   else {
     const a=Math.atan2(snake1.y-head.y,snake1.x-head.x);
@@ -737,12 +752,12 @@ function botThinkHard(){
   const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
   const wallDist=PREDATOR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
   const playerWallDist=PREDATOR_RADIUS-Math.hypot(snake1.x-CX,snake1.y-CY);
-  const di=6+Math.floor(Math.random()*4);
+  const di=15+Math.floor(Math.random()*10); // Decreased difficulty
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeHardMove(dist,wallDist,playerWallDist); return; }
   bot.lastDecisionFrame=bot.actionFrame;
   if(bot.counterTimer>0){ bot.counterTimer--; bot.state='attack'; }
   else if(wallDist<PREDATOR_RADIUS*0.15){ bot.state='escape'; bot.stateTimer=20; }
-  else if(playerWallDist<PREDATOR_RADIUS*0.28&&dist<PREDATOR_RADIUS*0.55&&Math.random()<0.55){ bot.state='trap'; bot.stateTimer=30+Math.floor(Math.random()*20); bot.trapPhase=true; }
+  else if(playerWallDist<PREDATOR_RADIUS*0.28&&dist<PREDATOR_RADIUS*0.55&&Math.random()<0.40){ bot.state='trap'; bot.stateTimer=30+Math.floor(Math.random()*20); bot.trapPhase=true; } // Reduced trap prob
   else if(dist<PREDATOR_RADIUS*0.4&&Math.random()<0.15&&!bot.baitPhase){ bot.state='bait'; bot.baitTimer=20+Math.floor(Math.random()*15); bot.baitPhase=true; }
   else if(dist<PREDATOR_RADIUS*0.65){ bot.state='attack'; bot.baitPhase=false; }
   else bot.state='pursue';
@@ -753,13 +768,13 @@ function executeHardMove(dist,wallDist,playerWallDist){
   if(bot.state==='bait'&&bot.baitTimer>0){ bot.baitTimer--; const aa=Math.atan2(head.y-snake1.y,head.x-snake1.x); let da=aa-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*0.9); if(bot.baitTimer===0){ bot.state='attack'; bot.counterTimer=25; } return; }
   if(bot.state==='trap'&&bot.stateTimer>0){ bot.stateTimer--; const oa=Math.atan2(snake1.y-head.y,snake1.x-head.x)+Math.PI*0.5; let da=oa-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*1.1); return; }
   if(bot.state==='attack'||bot.state==='pursue'){
-    const predict=bot.state==='attack'?22:14;
+    const predict=bot.state==='attack'?10:6; // Decreased difficulty
     let aimX=snake1.x+Math.cos(snake1.angle)*snake1.speed*predict;
     let aimY=snake1.y+Math.sin(snake1.angle)*snake1.speed*predict;
     if(dist<PREDATOR_RADIUS*0.3&&snake1.segments.length>6){ const mid=snake1.segments[Math.floor(snake1.segments.length*0.45)]; aimX=mid.x; aimY=mid.y; }
     const a=Math.atan2(aimY-head.y,aimX-head.x);
     let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.06)*Math.min(1.3,Math.abs(da)*1.8));
+    snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.15)*Math.min(1.15,Math.abs(da)*1.4)); // Slightly decreased tracking
     if(wallDist<PREDATOR_RADIUS*0.2){ const ca=Math.atan2(CY-head.y,CX-head.x); let cda=ca-snake2.angle; while(cda>Math.PI) cda-=Math.PI*2; while(cda<-Math.PI) cda+=Math.PI*2; snake2.turn(Math.sign(cda)*0.6); }
   }
 }
@@ -769,7 +784,7 @@ function predatorBotThink(){
   else if(botDiff==='medium') botThinkMedium();
   else botThinkHard();
 }
-function onBotHit(){ if(botDiff==='hard'){ bot.counterTimer=30; bot.state='attack'; } }
+function onBotHit(){ if(botDiff==='hard'){ bot.counterTimer=20; bot.state='attack'; } } 
 
 function initBgParticles(){
   bgParticles=[];
@@ -807,7 +822,6 @@ function startPredatorRound() {
   snake1.maxHp = maxHp; snake1.hp = maxHp;
   snake2.maxHp = maxHp; snake2.hp = maxHp;
 
-  // Setup Names & Colors
   const n1 = p1Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN';
   let n2 = p2Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN';
   if(gameMode === 'bot') n2 = p2Snake === 'small' ? '🤖 SPECTER BOT' : '🤖 LEVIATHAN BOT';
@@ -863,9 +877,12 @@ function updateHpBars(){
   document.getElementById('hp-text-leviathan').textContent=`${Math.max(0,leviathanSnake.hp)}/${leviathanSnake.maxHp}`;
 }
 function checkHit(attacker,defender){
+  if(!attacker.alive || !defender.alive) return;
   if(attacker.hitCooldown>0) return;
   const head=attacker.segments[0];
-  for(let i=2;i<defender.segments.length;i++){
+  // Calculate limit for transparent tail (tail is physically uncollidable and doesn't take damage)
+  const limit = Math.floor(defender.segments.length * 0.7);
+  for(let i=2;i<limit;i++){
     const s=defender.segments[i];
     if(Math.hypot(head.x-s.x,head.y-s.y)<SEGMENT_SIZE*1.6){
       defender.hp--; attacker.hits++; attacker.dmgDealt++;
@@ -877,6 +894,7 @@ function checkHit(attacker,defender){
     }
   }
 }
+
 function gameLoop(){
   if(!gameActive) return;
   if(isPaused){ animFrame=requestAnimationFrame(gameLoop); return; }
@@ -886,8 +904,15 @@ function gameLoop(){
   drawArena();
   handleInput();
   if(gameMode==='bot') predatorBotThink();
+  
   snake1.update(); snake2.update();
+
   checkHit(snake1,snake2); checkHit(snake2,snake1);
+  
+  // Enforce rigid head/body boundaries. Only top 70% is solid.
+  enforceSolidBodies(snake1, snake2, 0.7);
+  enforceSolidBodies(snake2, snake1, 0.7);
+
   updateParticles();
   if(finalSlowMo){ 
     finalSlowMoFrames--; 
@@ -1007,9 +1032,9 @@ const TR_FOOD_LIFETIME=2000;
 const TR_FOOD_AHEAD_DIST=80;
 
 const TR_DIFF={
-  easy:{reactionMs:900,decisionInterval:70,goodFoodChance:0.45,wrongFoodChance:0.35,turnSpeed:0.55,redEffect:-5,greenEffect:4},
-  medium:{reactionMs:450,decisionInterval:30,goodFoodChance:0.72,wrongFoodChance:0.18,turnSpeed:0.80,redEffect:-4,greenEffect:5},
-  hard:{reactionMs:120,decisionInterval:8,goodFoodChance:0.95,wrongFoodChance:0.04,turnSpeed:1.0,redEffect:-3,greenEffect:6}
+  easy:{reactionMs:900,decisionInterval:70,goodFoodChance:0.45,wrongFoodChance:0.35,turnSpeed:0.045,redEffect:-5,greenEffect:4},
+  medium:{reactionMs:450,decisionInterval:30,goodFoodChance:0.72,wrongFoodChance:0.18,turnSpeed:0.065,redEffect:-4,greenEffect:5},
+  hard:{reactionMs:120,decisionInterval:8,goodFoodChance:0.95,wrongFoodChance:0.04,turnSpeed:0.085,redEffect:-3,greenEffect:6}
 };
 
 const trCam = { x: 0, y: 0 };
@@ -1022,7 +1047,7 @@ class TRSnake {
     this.turnSpeed=cfg.turnSpeed||0.07;
     this.color=isBot?'#f0a':'#0ff'; this.glow=isBot?'#f04':'#0af';
     this.length=TR_INIT_LENGTH; this.segments=[];
-    this.wallSlowTimer=0; this.alive=true; this.foodEaten=0;
+    this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true; this.foodEaten=0;
     for(let i=0;i<TR_INIT_LENGTH;i++)
       this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
@@ -1038,6 +1063,7 @@ class TRSnake {
   }
   update(){
     if(!this.alive) return;
+    if(this.hitCooldown>0) this.hitCooldown--;
     let spd=this.speed;
     if(this.wallSlowTimer>0){ spd*=0.4; this.wallSlowTimer--; }
     let nx=this.x+Math.cos(this.angle)*spd;
@@ -1057,10 +1083,15 @@ class TRSnake {
     if(!this.alive) return;
     ctx.save(); ctx.shadowColor=this.glow; ctx.shadowBlur=14;
     for(let i=this.segments.length-1;i>=0;i--){
-      const s=this.segments[i]; const t=1-i/this.segments.length;
-      const r=SEGMENT_SIZE*(0.45+t*0.65);
+      const s=this.segments[i];
+      const r=SEGMENT_SIZE * 1.1; // Perfectly uniform width 
       ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
-      ctx.fillStyle=i===0?this.color:`rgba(${hexToRgb(this.color)},${t*.8})`; ctx.fill();
+      ctx.fillStyle=this.color; // Perfectly uniform solid color
+      ctx.fill();
+    }
+    if(this.hitCooldown>0&&this.hitCooldown%4<2){
+      ctx.beginPath(); ctx.arc(this.x,this.y,SEGMENT_SIZE*2.5,0,Math.PI*2);
+      ctx.strokeStyle=this.glow; ctx.lineWidth=2; ctx.globalAlpha=.5; ctx.stroke();
     }
     ctx.restore();
   }
@@ -1144,6 +1175,26 @@ function spawnTRFood(snake,owner){
   const foodType=Math.random()<0.6?'red':'green';
   const f=new TRFood(fx,fy,foodType); f.owner=owner; trFoods.push(f);
 }
+
+// Function to handle tail removal hits
+function trCheckHit(attacker, defender) {
+  if(!attacker.alive || !defender.alive) return;
+  if(attacker.hitCooldown > 0) return;
+  const head = attacker.segments[0];
+  const limit = Math.floor(defender.segments.length * 0.7); // Phantom tail applies
+  for(let i=2; i<limit; i++) {
+    const s = defender.segments[i];
+    if(Math.hypot(head.x - s.x, head.y - s.y) < SEGMENT_SIZE * 1.6) {
+      defender.setLength(defender.length - 1); // Point / Length decrement like Predator
+      attacker.hitCooldown = 40; 
+      defender.hitCooldown = 20;
+      triggerShake(); 
+      addParticles(s.x, s.y, attacker.color, 20);
+      break;
+    }
+  }
+}
+
 function trGameLoop(){
   if(!trActive) return;
   if(isPaused){ trAnimFrame=requestAnimationFrame(trGameLoop); return; }
@@ -1163,7 +1214,16 @@ function trGameLoop(){
 
   drawArena(); trHandleInput();
   if(trGameMode==='bot') trBotThink(now);
+  
   trSnake1.update(); trSnake2.update();
+
+  trCheckHit(trSnake1, trSnake2);
+  trCheckHit(trSnake2, trSnake1);
+
+  // Enforce rigid head/body boundaries. Only top 70% is solid.
+  enforceSolidBodies(trSnake1, trSnake2, 0.7);
+  enforceSolidBodies(trSnake2, trSnake1, 0.7);
+
   trCheckFoodCollision(now); trManageFoods(now);
   updateParticles(); trSnake1.draw(); trSnake2.draw();
   trFoods.forEach(f=>{ if(f.alive){ const rem=Math.max(0,1-(now-f.spawnTime)/TR_FOOD_LIFETIME); f.draw(rem); }});
@@ -1228,7 +1288,7 @@ function trBotExecuteMove(botFood,wallDist,dc){
   if(trBot.targetFood&&trBot.targetFood.alive){
     const a=Math.atan2(trBot.targetFood.y-head.y,trBot.targetFood.x-head.x);
     let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    const noise=trDiff==='hard'?0.04:trDiff==='medium'?0.15:0.4;
+    const noise=trDiff==='hard'?0.0:trDiff==='medium'?0.05:0.2; // Reduced noise
     trSnake2.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(1.2,Math.abs(da)*1.5));
   } else if(botFood&&botFood.alive){
     const awayA=Math.atan2(head.y-botFood.y,head.x-botFood.x);
@@ -1300,14 +1360,14 @@ function endTRGame(){
 // =========================================================
 // MODE 3 — SHRINK TO WIN
 // =========================================================
-const STW_INIT_LENGTH = 40; // Decreased from 60
-const STW_PLAYER_INIT_LENGTH = 120; // Increased from 80
+const STW_INIT_LENGTH = 40; 
+const STW_PLAYER_INIT_LENGTH = 120; 
 const STW_TARGET_LENGTH = 1;
 const STW_FOOD_RADIUS = 11;
-const STW_FOOD_SHRINK = -4; // Changed from -2
+const STW_FOOD_SHRINK = -4; 
 const STW_GRAVITY_DURATION = 5000;
 const STW_RIVAL_DURATION   = 5000;
-const STW_RIVAL_SHRINK     = -4; // Changed from -3 for consistency
+const STW_RIVAL_SHRINK     = -4; 
 const STW_TELEPORT_COOLDOWN = 2000;
 const STW_BLACKHOLE_DURATION = 5000;
 const STW_HUNTER_DURATION = 5000;
@@ -1373,12 +1433,12 @@ class STWSnake {
   draw(){
     if(!this.alive) return;
     ctx.save(); ctx.shadowColor=this.glow; 
-    // Removed shadowBlur to prevent massive framerate drops (which caused the slow-down effect)
     for(let i=this.segments.length-1;i>=0;i--){
-      const s=this.segments[i]; const t=1-i/this.segments.length;
-      const r=SEGMENT_SIZE*(0.45+t*0.65);
+      const s=this.segments[i]; 
+      const r=SEGMENT_SIZE * 1.1; // Perfectly uniform width 
       ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
-      ctx.fillStyle=i===0?this.color:`rgba(${hexToRgb(this.color)},${t*.8})`; ctx.fill();
+      ctx.fillStyle=this.color; // Perfectly uniform solid color
+      ctx.fill();
     }
     ctx.restore();
   }
@@ -1421,7 +1481,7 @@ class GravityZone {
     this.r=40; this.alive=true;
     this.spawnTime=Date.now();
     if(targetSnake && targetSnake.alive && targetSnake.segments.length > 0){
-      const seg = targetSnake.segments[0]; // Spawns directly on the head
+      const seg = targetSnake.segments[0]; 
       this.x = seg.x; this.y = seg.y;
     } else {
       this.x = CX; this.y = CY;
@@ -1440,7 +1500,6 @@ class GravityZone {
     for(let i=0;i<3;i++){
       ctx.beginPath(); ctx.arc(this.x,this.y,this.r*(0.4+i*0.3),0,Math.PI*2);
       ctx.strokeStyle=`hsl(${190+i*20},100%,60%)`; ctx.lineWidth=2; 
-      // Removed shadowBlur to prevent massive framerate drops
       ctx.stroke();
     }
     ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
@@ -1486,7 +1545,6 @@ class BlackHole {
     ctx.beginPath(); ctx.arc(0,0,this.r + 20, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2);
     ctx.fillStyle = '#000'; 
-    // Removed shadowBlur to prevent massive framerate drops
     ctx.fill();
     ctx.restore();
   }
@@ -1579,7 +1637,7 @@ class MongooseHunter {
 
 let stwActive=false, stwMode='bot';
 let stwSelectedSnake=null, stwPendingMode=null;
-let stwPlayerSnake=null, stwBotSnake=null;
+let stwPlayerSnake=null, stwBotSnake=null, stwP2Snake=null;
 let stwFoods=[];
 let stwGravityZones=[];
 let stwBlackHoles=[];
@@ -1590,7 +1648,7 @@ let stwStartTime=0;
 let stwElapsed=0;
 let stwBestTime=Infinity;
 let stwGravityEncounters=0, stwRivalsOutperformed=0;
-let stwInputDir={x:0,y:0};
+let stwInputDir={x:0,y:0}, stwInputDir2={x:0,y:0};
 let stwBotActionFrame=0, stwBotLastDecision=0, stwBotTargetFood=null;
 let stwHurdleState = 'wait_gravity';
 let stwHurdleTimer = 0;
@@ -1649,6 +1707,7 @@ function startShrinkToWin(mode, pType){
   const rivalCountEl = document.getElementById('stw-rival-count');
 
   if(stwMode==='bot'){
+    stwP2Snake=null;
     const ba=pa+Math.PI;
     const bCfg = pType === 'small' ? {c:'#f0a',g:'#f04'} : {c:'#0ff',g:'#0af'};
     stwBotSnake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
@@ -1656,8 +1715,17 @@ function startShrinkToWin(mode, pType){
     rivalLenEl.style.color = bCfg.c;
     rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`;
     rivalCountEl.style.color = bCfg.c;
+  } else if(stwMode==='local'){
+    stwBotSnake=null;
+    const ba=pa+Math.PI;
+    const bCfg = pType === 'small' ? {c:'#f0a',g:'#f04'} : {c:'#0ff',g:'#0af'};
+    stwP2Snake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
+    rivalLenEl.style.color = bCfg.c;
+    rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`;
+    rivalCountEl.style.color = bCfg.c;
   } else {
     stwBotSnake=null;
+    stwP2Snake=null;
     rivalLenEl.style.color = '#ff6b35';
     rivalLenEl.style.textShadow = '0 0 12px #ff3300';
     rivalCountEl.style.color = '#ff3300';
@@ -1674,13 +1742,14 @@ function startShrinkToWin(mode, pType){
   stwHurdleTimer = Date.now() + 10000;
 
   document.getElementById('stw-player-len').textContent = stwPlayerSnake.length;
-  document.getElementById('stw-target-label').textContent = 'TARGET: ' + STW_TARGET_LENGTH;
-  document.getElementById('stw-rival-label').textContent = stwMode==='bot' ? '🤖 BOT' : '🌀 RIVALS';
-  document.getElementById('stw-rival-len').textContent = stwMode==='bot' ? stwBotSnake.length : '—';
+  document.getElementById('stw-target-label').textContent = stwMode==='local' ? 'P1 TARGET: ' + STW_TARGET_LENGTH : 'TARGET: ' + STW_TARGET_LENGTH;
+  document.getElementById('stw-rival-label').textContent = stwMode==='bot' ? '🤖 BOT' : (stwMode==='local' ? '🐍 P2 LENGTH' : '🌀 RIVALS');
+  document.getElementById('stw-rival-len').textContent = stwMode==='bot' ? stwBotSnake.length : (stwMode==='local' ? stwP2Snake.length : '—');
   document.getElementById('stw-event-label').classList.add('hidden');
 
   const isMobile='ontouchstart' in window;
   document.getElementById('stw-joystick-left').classList.toggle('hidden',!isMobile);
+  document.getElementById('stw-joystick-right').classList.toggle('hidden',!(isMobile && stwMode==='local'));
   if(isMobile) setupSTWJoystick();
 
   if(stwAnimFrame) cancelAnimationFrame(stwAnimFrame);
@@ -1695,6 +1764,15 @@ function stwHandleInput(){
     const ta=Math.atan2(stwInputDir.y,stwInputDir.x);
     let da=ta-stwPlayerSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     stwPlayerSnake.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
+  }
+  if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) {
+    if(keys['ArrowLeft']) stwP2Snake.turn(-1);
+    if(keys['ArrowRight']) stwP2Snake.turn(1);
+    if(stwInputDir2.x!==0||stwInputDir2.y!==0){
+      const ta=Math.atan2(stwInputDir2.y,stwInputDir2.x);
+      let da=ta-stwP2Snake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+      stwP2Snake.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
+    }
   }
 }
 
@@ -1736,8 +1814,15 @@ function stwGameLoop(){
   stwElapsed=now-stwStartTime;
   updateShake();
 
-  stwCam.x += (stwPlayerSnake.x - stwCam.x) * STW_CAM_LERP;
-  stwCam.y += (stwPlayerSnake.y - stwCam.y) * STW_CAM_LERP;
+  let targetCamX = stwPlayerSnake.x;
+  let targetCamY = stwPlayerSnake.y;
+  if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) {
+      targetCamX = (stwPlayerSnake.x + stwP2Snake.x) / 2;
+      targetCamY = (stwPlayerSnake.y + stwP2Snake.y) / 2;
+  }
+  stwCam.x += (targetCamX - stwCam.x) * STW_CAM_LERP;
+  stwCam.y += (targetCamY - stwCam.y) * STW_CAM_LERP;
+  
   const camOffX = CX - stwCam.x;
   const camOffY = CY - stwCam.y;
 
@@ -1757,6 +1842,9 @@ function stwGameLoop(){
       if(stwMode === 'bot') {
         if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
         if(stwBotSnake && stwBotSnake.alive) stwGravityZones.push(new GravityZone(stwBotSnake));
+      } else if (stwMode === 'local') {
+        if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
+        if(stwP2Snake && stwP2Snake.alive) stwGravityZones.push(new GravityZone(stwP2Snake));
       } else {
         if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
       }
@@ -1769,6 +1857,7 @@ function stwGameLoop(){
       stwBlackHoles = [];
       if(stwPlayerSnake && stwPlayerSnake.alive) stwBlackHoles.push(new BlackHole(stwPlayerSnake));
       if(stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwBlackHoles.push(new BlackHole(stwBotSnake));
+      if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwBlackHoles.push(new BlackHole(stwP2Snake));
       
       stwHurdleState = 'blackhole';
       stwHurdleTimer = now + 5000;
@@ -1794,6 +1883,7 @@ function stwGameLoop(){
       stwHunters = [];
       if (stwPlayerSnake && stwPlayerSnake.alive) stwHunters.push(new MongooseHunter(stwPlayerSnake));
       if (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwHunters.push(new MongooseHunter(stwBotSnake));
+      if (stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwHunters.push(new MongooseHunter(stwP2Snake));
       
       stwHurdleState = 'hunter';
       stwHurdleTimer = now + STW_HUNTER_DURATION;
@@ -1821,9 +1911,10 @@ function stwGameLoop(){
 
   let playerTrapped = stwBlackHoles.some(bh => bh.target === stwPlayerSnake);
   let botTrapped = stwBotSnake && stwBlackHoles.some(bh => bh.target === stwBotSnake);
+  let p2Trapped = stwP2Snake && stwBlackHoles.some(bh => bh.target === stwP2Snake);
 
   // Normal Input & AI (Skip if Trapped)
-  if(!playerTrapped) stwHandleInput();
+  if(!playerTrapped || (stwMode === 'local' && !p2Trapped)) stwHandleInput();
   if(stwBotSnake && !botTrapped) stwBotThink();
 
   // Enforce Orbits
@@ -1834,6 +1925,7 @@ function stwGameLoop(){
 
   stwPlayerSnake.update(STW_RADIUS);
   if(stwBotSnake) stwBotSnake.update(STW_RADIUS);
+  if(stwP2Snake) stwP2Snake.update(STW_RADIUS);
   stwRivals.forEach(r=>{ r.think(); r.update(STW_RADIUS); });
   
   // Update Hunters and Check Collision
@@ -1846,7 +1938,7 @@ function stwGameLoop(){
         h.alive = false;
         target.setLength(target.length + STW_HUNTER_PENALTY);
         addParticles(target.x, target.y, '#f04', 20);
-        if (target === stwPlayerSnake) triggerShake();
+        if (target === stwPlayerSnake || target === stwP2Snake) triggerShake();
       }
     }
   });
@@ -1869,6 +1961,10 @@ function stwGameLoop(){
     if(stwBotSnake&&gz.contains(stwBotSnake.x,stwBotSnake.y)){
       stwBotSnake.teleportRandom();
       stwBotTargetFood=null;
+      gz.alive = false; // Destroy instantly
+    }
+    if(stwP2Snake&&gz.contains(stwP2Snake.x,stwP2Snake.y)){
+      stwP2Snake.teleportRandom();
       gz.alive = false; // Destroy instantly
     }
     stwRivals.forEach(rv=>{ 
@@ -1906,6 +2002,19 @@ function stwGameLoop(){
     });
   }
 
+  if(stwMode === 'local' && stwP2Snake && !p2Trapped){
+    stwFoods.forEach(f=>{
+      if(!f.alive) return;
+      if(Math.hypot(stwP2Snake.x-f.x,stwP2Snake.y-f.y)<SEGMENT_SIZE+f.r){
+        f.alive=false;
+        stwP2Snake.setLength(stwP2Snake.length+STW_FOOD_SHRINK);
+        stwP2Snake.foodEaten++;
+        addParticles(f.x,f.y, stwSelectedSnake === 'small' ? '#f04' : '#0af', 10);
+        setTimeout(()=>{ if(stwActive){ stwFoods.push(new STWFood()); }},400);
+      }
+    });
+  }
+
   stwRivals.forEach(rv=>{
     stwFoods.forEach(f=>{
       if(!f.alive) return;
@@ -1929,6 +2038,7 @@ function stwGameLoop(){
   stwRivals.forEach(r=>r.draw());
   stwHunters.forEach(h=>h.draw());
   if(stwBotSnake) stwBotSnake.draw();
+  if(stwP2Snake) stwP2Snake.draw();
   stwPlayerSnake.draw();
   drawParticles();
 
@@ -1953,19 +2063,24 @@ function stwGameLoop(){
     document.getElementById('stw-rival-len').textContent=stwBotSnake?stwBotSnake.length:'—';
     const rc=stwRivals.length;
     document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
+  } else if (stwMode==='local') {
+    document.getElementById('stw-rival-len').textContent=stwP2Snake?stwP2Snake.length:'—';
+    const rc=stwRivals.length;
+    document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
   } else {
     const rc=stwRivals.length;
     document.getElementById('stw-rival-len').textContent=rc>0?stwRivals[0].length:'—';
     document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
   }
 
-  if(stwPlayerSnake.length<=STW_TARGET_LENGTH){ endSTWGame(true); return; }
-  if(stwMode==='bot'&&stwBotSnake&&stwBotSnake.length<=STW_TARGET_LENGTH){ endSTWGame(false); return; }
+  if(stwPlayerSnake.length<=STW_TARGET_LENGTH){ endSTWGame('p1'); return; }
+  if(stwMode==='bot'&&stwBotSnake&&stwBotSnake.length<=STW_TARGET_LENGTH){ endSTWGame('bot'); return; }
+  if(stwMode==='local'&&stwP2Snake&&stwP2Snake.length<=STW_TARGET_LENGTH){ endSTWGame('p2'); return; }
 
   stwAnimFrame=requestAnimationFrame(stwGameLoop);
 }
 
-function endSTWGame(playerWon){
+function endSTWGame(winnerStr){
   document.getElementById('btn-pause').classList.add('hidden');
   cancelAnimationFrame(stwAnimFrame); stwAnimFrame=null; stwActive=false;
   const totalMs=Date.now()-stwStartTime;
@@ -1973,15 +2088,21 @@ function endSTWGame(playerWon){
   const mins=Math.floor(secs/60);
   const timeStr=`${mins}:${String(secs%60).padStart(2,'0')}`;
   const prevBest=stwBestTime;
+  let playerWon = winnerStr === 'p1';
   if(playerWon&&totalMs<stwBestTime) stwBestTime=totalMs;
   const bestSecs=Math.floor(stwBestTime/1000);
   const bestMins=Math.floor(bestSecs/60);
   const bestStr=stwBestTime===Infinity?'—':`${bestMins}:${String(bestSecs%60).padStart(2,'0')}`;
+  
   let statsHtml, winnerLabel, winClass;
   if(stwMode==='bot'){
     winnerLabel=playerWon?'🌀 YOU WIN!':'🤖 BOT WINS!';
     winClass=playerWon;
     statsHtml=`<div>Winner</div><span>${playerWon?'You':'Bot'}</span><div>Match Duration</div><span>${timeStr}</span><div>Final Length</div><span>${stwPlayerSnake.length}</span><div>Shrink Food Collected</div><span>${stwPlayerSnake.foodEaten}</span>`;
+  } else if(stwMode==='local'){
+    winnerLabel=playerWon?'P1 WINS!':'P2 WINS!';
+    winClass=true; // Neutral win color
+    statsHtml=`<div>Winner</div><span>${playerWon?'P1':'P2'}</span><div>Match Duration</div><span>${timeStr}</span><div>P1 Length</div><span>${stwPlayerSnake.length}</span><div>P2 Length</div><span>${stwP2Snake.length}</span>`;
   } else {
     winnerLabel='🌀 COMPLETE!';
     winClass=true;
@@ -2036,6 +2157,7 @@ function setupTRJoystick(){
 }
 function setupSTWJoystick(){
   setupJoy('stw-joy-outer-l','stw-joy-inner-l',stwInputDir);
+  if(stwMode === 'local') setupJoy('stw-joy-outer-r','stw-joy-inner-r',stwInputDir2);
 }
 function setupJoy(outId,innId,dir){
   const outer=document.getElementById(outId);
