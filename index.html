@@ -1267,8 +1267,8 @@ const TR_FOOD_AHEAD_DIST=80;
 
 const TR_DIFF={
   easy:{reactionMs:900,decisionInterval:70,goodFoodChance:0.45,wrongFoodChance:0.35,turnSpeed:0.045,redEffect:-5,greenEffect:4},
-  medium:{reactionMs:450,decisionInterval:30,goodFoodChance:0.72,wrongFoodChance:0.18,turnSpeed:0.065,redEffect:-4,greenEffect:5},
-  hard:{reactionMs:120,decisionInterval:8,goodFoodChance:0.95,wrongFoodChance:0.04,turnSpeed:0.085,redEffect:-3,greenEffect:6}
+  medium:{reactionMs:450,decisionInterval:30,goodFoodChance:0.72,wrongFoodChance:0.18,turnSpeed:0.07,redEffect:-4,greenEffect:5},
+  hard:{reactionMs:120,decisionInterval:8,goodFoodChance:0.95,wrongFoodChance:0.04,turnSpeed:0.07,redEffect:-3,greenEffect:6}
 };
 
 const trCam = { x: 0, y: 0 };
@@ -1902,13 +1902,26 @@ function trBotExecuteMove(botFood,wallDist,dc){
   if(trVariant === 'classic' && wallDist<current_TR_RADIUS*0.18){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; trSnake2.turn(Math.sign(da)*1.0); return; }
   
   if(trBot.targetFood&&trBot.targetFood.alive){
+    const distToFood = Math.hypot(trBot.targetFood.x - head.x, trBot.targetFood.y - head.y);
     const a=Math.atan2(trBot.targetFood.y-head.y,trBot.targetFood.x-head.x);
     let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    const noise=trDiff==='hard'?0.0:trDiff==='medium'?0.05:0.2; 
+    
+    // ORBIT BREAKER: if stuck closely circling food due to turning limits, widen arc
+    if (distToFood < 50 && Math.abs(da) > 1.2) {
+        trSnake2.turn(-Math.sign(da) * 0.8);
+        return;
+    }
+    
+    const noise = trDiff==='hard'?0.0:trDiff==='medium'?0.05:0.2; 
     trSnake2.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(1.2,Math.abs(da)*1.5));
   } else if(botFood&&botFood.alive){
+    const distToFood = Math.hypot(botFood.x - head.x, botFood.y - head.y);
     const awayA=Math.atan2(head.y-botFood.y,head.x-botFood.x);
     let da=awayA-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    if (distToFood < 50 && Math.abs(da) > 1.2) {
+        trSnake2.turn(-Math.sign(da) * 0.8);
+        return;
+    }
     trSnake2.turn(Math.sign(da)*0.7);
   } else {
     const a=Math.atan2(CY-head.y,CX-head.x); let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
@@ -2492,13 +2505,14 @@ function startShrinkToWin(mode){
   const rivalLenEl = document.getElementById('stw-rival-len');
   const rivalCountEl = document.getElementById('stw-rival-count');
 
+  // BOT NORMALIZATION: Medium and Hard have equal physical speeds. Easy is slower.
   if(stwMode==='bot'){
     stwP2Snake=null;
     const ba=pa+Math.PI;
     stwBotSnake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
     
-    stwBotSnake.speed = stwBotDiff === 'hard' ? 4.6 : (stwBotDiff === 'medium' ? 4.3 : 3.8);
-    stwBotSnake.turnSpeed = stwBotDiff === 'hard' ? 0.085 : (stwBotDiff === 'medium' ? 0.075 : 0.05);
+    stwBotSnake.speed = stwBotDiff === 'easy' ? 3.8 : 4.3;
+    stwBotSnake.turnSpeed = stwBotDiff === 'easy' ? 0.05 : 0.07;
     
     rivalLenEl.style.color = bCfg.c;
     rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`;
@@ -2582,14 +2596,28 @@ function stwBotThink(){
     stwBotSnake.turn(Math.sign(da)*1.0); return;
   }
   
+  // HAZARD AVOIDANCE BUG FIX: Steer *away* from hazard, not towards the center.
   const avoidZone = stwBotDiff === 'hard' ? 45 : (stwBotDiff === 'medium' ? 35 : 20);
-  if(stwGravityZones.some(gz=>gz.alive&&Math.hypot(head.x-gz.x,head.y-gz.y)<gz.r+avoidZone) ||
-     stwBlackHoles.some(bh=>bh.alive&&Math.hypot(head.x-bh.x,head.y-bh.y)<bh.r+avoidZone)) {
-    const ca=Math.atan2(CY-head.y,CX-head.x);
-    let da=ca-stwBotSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    stwBotSnake.turn(Math.sign(da)*0.9); return;
+  let hazard = null;
+  for (let gz of stwGravityZones) {
+     if (gz.alive && Math.hypot(head.x - gz.x, head.y - gz.y) < gz.r + avoidZone) { hazard = gz; break; }
+  }
+  if (!hazard) {
+     for (let bh of stwBlackHoles) {
+          if (bh.alive && Math.hypot(head.x - bh.x, head.y - bh.y) < bh.r + avoidZone) { hazard = bh; break; }
+     }
+  }
+
+  if(hazard) {
+    const hazA = Math.atan2(hazard.y - head.y, hazard.x - head.x);
+    let da = hazA - stwBotSnake.angle; 
+    while(da > Math.PI) da -= Math.PI*2; 
+    while(da < -Math.PI) da += Math.PI*2;
+    stwBotSnake.turn(-Math.sign(da) * 1.2); // Notice the negative sign: steer away!
+    return;
   }
   
+  // SCALING BY CALCULATION INTERVAL: Speed remains identical.
   let di = stwBotDiff === 'hard' ? 5 : (stwBotDiff === 'medium' ? 15 : 25);
   if(stwBotActionFrame-stwBotLastDecision < di){ stwBotChaseFood(); return; }
   stwBotLastDecision=stwBotActionFrame;
@@ -2603,11 +2631,18 @@ function stwBotThink(){
 function stwBotChaseFood(){
   if(!stwBotTargetFood||!stwBotTargetFood.alive){ if(Math.random()<0.02) stwBotSnake.turn((Math.random()-0.5)*2); return; }
   const head=stwBotSnake.segments[0];
+  const distToFood = Math.hypot(stwBotTargetFood.x - head.x, stwBotTargetFood.y - head.y);
   const a=Math.atan2(stwBotTargetFood.y-head.y,stwBotTargetFood.x-head.x);
   let da=a-stwBotSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
   
-  const maxTurn = stwBotDiff === 'hard' ? 1.6 : (stwBotDiff === 'medium' ? 1.3 : 1.0);
-  const noise = stwBotDiff === 'hard' ? 0.05 : (stwBotDiff === 'medium' ? 0.25 : 0.4);
+  // ORBIT BREAKER BUG FIX: If closely orbiting food because of turn radius, widen approach slightly to break loop.
+  if (distToFood < 50 && Math.abs(da) > 1.2) {
+      stwBotSnake.turn(-Math.sign(da) * 0.8);
+      return;
+  }
+
+  const maxTurn = stwBotDiff === 'easy' ? 1.0 : 1.6;
+  const noise = stwBotDiff === 'hard' ? 0.0 : (stwBotDiff === 'medium' ? 0.15 : 0.4);
   
   stwBotSnake.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(maxTurn,Math.abs(da)*1.6));
 }
