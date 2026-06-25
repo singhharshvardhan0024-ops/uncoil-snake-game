@@ -400,14 +400,16 @@ canvas{display:block;position:absolute;top:0;left:0}
   </div>
 
 </div><script>
+// --- IMAGE LOAD ASSET ---
+const arenaImage = new Image();
+// Ensure your file in E:\uncoil is named exactly "hud_border.png"
+arenaImage.src = 'hud_border.png';
 
 // --- AUDIO SYSTEM ---
 let botBgMusic = new Audio('Gravity_Zone.mp3');
 botBgMusic.loop = true;
 botBgMusic.volume = 0.7;
 
-// Fallback logic: If the local file isn't found, it switches to a public web track.
-// This guarantees you'll hear audio to confirm the code works.
 botBgMusic.addEventListener('error', function() {
     console.warn("Local file 'Gravity_Zone.mp3' not found. Falling back to an online test track so you know the code works.");
     botBgMusic.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
@@ -523,12 +525,12 @@ function resumeGame() {
     if(stwPlayerSnake) stwPlayerSnake.lastTeleportTime += pauseDuration;
     if(stwBotSnake) stwBotSnake.lastTeleportTime += pauseDuration;
     if(stwP2Snake) stwP2Snake.lastTeleportTime += pauseDuration;
-    stwGravityZones.forEach(gz => gz.spawnTime += pauseDuration);
-    stwBlackHoles.forEach(bh => bh.spawnTime += pauseDuration);
-    stwHunters.forEach(h => h.spawnTime += pauseDuration);
-    stwRivals.forEach(rv => rv.spawnTime += pauseDuration);
-    stwFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
-    stwPulitos.forEach(p => p.spawnTime += pauseDuration);
+    if(stwGravityZones) stwGravityZones.forEach(gz => gz.spawnTime += pauseDuration);
+    if(stwBlackHoles) stwBlackHoles.forEach(bh => bh.spawnTime += pauseDuration);
+    if(stwHunters) stwHunters.forEach(h => h.spawnTime += pauseDuration);
+    if(stwRivals) stwRivals.forEach(rv => rv.spawnTime += pauseDuration);
+    if(stwFoods) stwFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
+    if(stwPulitos) stwPulitos.forEach(p => p.spawnTime += pauseDuration);
   }
   isPaused = false;
   document.getElementById('screen-pause').classList.add('hidden');
@@ -576,7 +578,6 @@ function showAboutMode() {
   }
 }
 
-// Solid collision physics logic added for Predator and Tail Removal
 function enforceSolidBodies(sA, sB, solidRatio) {
   if(!sA || !sA.alive || !sB || !sB.alive) return;
   let limitB = Math.floor(sB.segments.length * solidRatio);
@@ -585,7 +586,7 @@ function enforceSolidBodies(sA, sB, solidRatio) {
     let s = sB.segments[i];
     if(!s) continue;
     let dist = Math.hypot(sA.x - s.x, sA.y - s.y);
-    let minDist = SEGMENT_SIZE * 1.8; // Collision boundary size
+    let minDist = SEGMENT_SIZE * 1.8; 
     if (dist < minDist && dist > 0) {
       let overlap = minDist - dist;
       let angle = Math.atan2(sA.y - s.y, sA.x - s.x);
@@ -654,7 +655,9 @@ class Snake {
     let nx=this.x+Math.cos(this.angle)*spd;
     let ny=this.y+Math.sin(this.angle)*spd;
     const dist=Math.hypot(nx-CX,ny-CY);
-    if(dist>PREDATOR_RADIUS-SEGMENT_SIZE){
+    
+    // Adjusted collision: scale radius to match inner visual edge of the border image
+    if(dist>PREDATOR_RADIUS*0.89 - SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.5;
       nx=this.x+Math.cos(this.angle)*spd;
@@ -770,7 +773,7 @@ function botThinkMedium(){
   bot.actionFrame++;
   const head=snake2.segments[0];
   const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
-  const wallDist=PREDATOR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  const wallDist=PREDATOR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
   if(bot.feintTimer>0){ bot.feintTimer--; snake2.turn(bot.feintDir*0.9); if(bot.feintTimer===0) bot.state='attack'; return; }
   const di=30+Math.floor(Math.random()*20); 
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeMediumMove(dist,wallDist); return; }
@@ -805,8 +808,8 @@ function botThinkHard(){
   bot.actionFrame++;
   const head=snake2.segments[0];
   const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
-  const wallDist=PREDATOR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
-  const playerWallDist=PREDATOR_RADIUS-Math.hypot(snake1.x-CX,snake1.y-CY);
+  const wallDist=PREDATOR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
+  const playerWallDist=PREDATOR_RADIUS*0.89-Math.hypot(snake1.x-CX,snake1.y-CY);
   const di=15+Math.floor(Math.random()*10); 
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeHardMove(dist,wallDist,playerWallDist); return; }
   bot.lastDecisionFrame=bot.actionFrame;
@@ -1170,12 +1173,33 @@ function drawArena(){
     ctx.restore();
   }
 
+  // Draw background gradient first
   const grad=ctx.createRadialGradient(CX,CY,r*.7,CX,CY,r);
   grad.addColorStop(0,'rgba(0,30,60,0)'); grad.addColorStop(1,'rgba(0,80,180,.12)');
   ctx.beginPath(); ctx.arc(CX,CY,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
-  ctx.save(); ctx.beginPath(); ctx.arc(CX,CY,r,0,Math.PI*2);
-  ctx.strokeStyle='rgba(0,200,255,.35)'; ctx.lineWidth=2; ctx.shadowColor='#0af'; ctx.shadowBlur=18; ctx.stroke();
-  ctx.shadowBlur=40; ctx.strokeStyle='rgba(0,200,255,.1)'; ctx.lineWidth=8; ctx.stroke(); ctx.restore();
+  
+  ctx.save();
+  // We ONLY draw your custom HUD border image here!
+  if (arenaImage.complete && arenaImage.naturalWidth > 0) {
+    const imgSize = r * 1.05; // Matches the slight padding in your PNG
+    ctx.shadowColor = '#0ff';
+    ctx.shadowBlur = 15;
+    ctx.drawImage(arenaImage, CX - imgSize, CY - imgSize, imgSize * 2, imgSize * 2);
+  } else {
+    // If the image fails to load, draw a RED warning circle so you know exactly why it failed.
+    ctx.beginPath(); 
+    ctx.arc(CX, CY, r, 0, Math.PI*2);
+    ctx.strokeStyle = '#ff0044'; 
+    ctx.lineWidth = 3; 
+    ctx.stroke();
+    
+    ctx.fillStyle = '#ff0044';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText("⚠️ IMAGE FAILED TO LOAD", CX, CY - r - 20);
+    ctx.fillText("Ensure 'hud_border.png' is in the same folder as the HTML file", CX, CY - r + 25);
+  }
+  ctx.restore();
 
   if (trActive && trVariant === 'gate' && gateState !== 'closed') {
     ctx.save();
@@ -1214,7 +1238,7 @@ function drawArena(){
 
 function getGateArenaPush(nx, ny, rad, snake) {
   let distMain = Math.hypot(nx - CX, ny - CY);
-  if (distMain <= current_TR_RADIUS - rad) return { push: false }; 
+  if (distMain <= current_TR_RADIUS*0.89 - rad) return { push: false }; 
 
   if (gateState === 'closed') {
       return { push: true, cx: CX, cy: CY };
@@ -1239,7 +1263,7 @@ function getGateArenaPush(nx, ny, rad, snake) {
   }
 
   let closest = {x: CX, y: CY};
-  let minDist = distMain - current_TR_RADIUS;
+  let minDist = distMain - current_TR_RADIUS*0.89;
   for (let i=0; i<gateChambers.length; i++) {
       let c = gateChambers[i];
       let d = Math.hypot(nx - c.x, ny - c.y) - c.r;
@@ -1250,7 +1274,7 @@ function getGateArenaPush(nx, ny, rad, snake) {
 
 function getSurvivalArenaPush(nx, ny, rad, snake) {
   let distMain = Math.hypot(nx - CX, ny - CY);
-  if (distMain <= current_TR_RADIUS - rad) return { push: false };
+  if (distMain <= current_TR_RADIUS*0.89 - rad) return { push: false };
 
   if (survivalState === 'closed_initial' || survivalState === 'closed_trapped') {
       for (let i=0; i<survivalChambers.length; i++) {
@@ -1259,7 +1283,7 @@ function getSurvivalArenaPush(nx, ny, rad, snake) {
           if (distC <= c.r - rad) return { push: false };
       }
       let closest = {x: CX, y: CY};
-      let minDist = distMain - current_TR_RADIUS;
+      let minDist = distMain - current_TR_RADIUS*0.89;
       for (let i=0; i<survivalChambers.length; i++) {
           let c = survivalChambers[i];
           let d = Math.hypot(nx - c.x, ny - c.y) - c.r;
@@ -1283,7 +1307,7 @@ function getSurvivalArenaPush(nx, ny, rad, snake) {
   }
 
   let closest = {x: CX, y: CY};
-  let minDist = distMain - current_TR_RADIUS;
+  let minDist = distMain - current_TR_RADIUS*0.89;
   for (let i=0; i<survivalChambers.length; i++) {
       let c = survivalChambers[i];
       let d = Math.hypot(nx - c.x, ny - c.y) - c.r;
@@ -1357,7 +1381,8 @@ class TRSnake {
       }
     } else {
       const dist=Math.hypot(nx-CX,ny-CY);
-      if(dist>current_TR_RADIUS-SEGMENT_SIZE){
+      // Adjusted collision: scale radius to match inner visual edge
+      if(dist>current_TR_RADIUS*0.89 - SEGMENT_SIZE){
         const pushAngle=Math.atan2(CY-ny,CX-nx);
         this.angle=pushAngle+(Math.random()-.5)*0.4;
         nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
@@ -1555,7 +1580,7 @@ function spawnTRFood(snake,owner){
   const perp=snake.angle+Math.PI/2*(Math.random()<0.5?1:-1);
   fx+=Math.cos(perp)*(Math.random()*40); fy+=Math.sin(perp)*(Math.random()*40);
   const d=Math.hypot(fx-CX,fy-CY);
-  if(d>current_TR_RADIUS*0.88){ const a=Math.atan2(fy-CY,fx-CX); fx=CX+Math.cos(a)*(current_TR_RADIUS*0.82); fy=CY+Math.sin(a)*(current_TR_RADIUS*0.82); }
+  if(d>current_TR_RADIUS*0.82){ const a=Math.atan2(fy-CY,fx-CX); fx=CX+Math.cos(a)*(current_TR_RADIUS*0.78); fy=CY+Math.sin(a)*(current_TR_RADIUS*0.78); }
   const foodType=Math.random()<0.6?'red':'green';
   const f=new TRFood(fx,fy,foodType); f.owner=owner; trFoods.push(f);
 }
@@ -1624,7 +1649,7 @@ function trGameLoop(){
               snakes.forEach(s => {
                   let needsTeleport = false;
                   for (let seg of s.segments) {
-                      if (Math.hypot(seg.x - CX, seg.y - CY) > current_TR_RADIUS - SEGMENT_SIZE) {
+                      if (Math.hypot(seg.x - CX, seg.y - CY) > current_TR_RADIUS*0.89 - SEGMENT_SIZE) {
                           needsTeleport = true; break;
                       }
                   }
@@ -1686,7 +1711,7 @@ function trGameLoop(){
               let snakes = [trSnake1, trSnake2];
               snakes.forEach(s => {
                   let headDistMain = Math.hypot(s.x - CX, s.y - CY);
-                  let isOutsideMain = headDistMain > current_TR_RADIUS - SEGMENT_SIZE;
+                  let isOutsideMain = headDistMain > current_TR_RADIUS*0.89 - SEGMENT_SIZE;
                   if (isOutsideMain) {
                       let closestChamber = survivalChambers[0];
                       if (Math.hypot(s.x - survivalChambers[1].x, s.y - survivalChambers[1].y) < Math.hypot(s.x - survivalChambers[0].x, s.y - survivalChambers[0].y)) {
@@ -1695,7 +1720,7 @@ function trGameLoop(){
                       
                       let fullyInside = true;
                       for (let seg of s.segments) {
-                          if (Math.hypot(seg.x - closestChamber.x, seg.y - closestChamber.y) > closestChamber.r - SEGMENT_SIZE) {
+                          if (Math.hypot(seg.x - closestChamber.x, seg.y - closestChamber.y) > closestChamber.r*0.91 - SEGMENT_SIZE) {
                               fullyInside = false; break;
                           }
                       }
@@ -1874,7 +1899,7 @@ function trHandleInput(){
 function trBotThink(now){
   const dc=TR_DIFF[trDiff]; trBot.actionFrame++;
   const head=trSnake2.segments[0];
-  const wallDist=current_TR_RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  const wallDist=current_TR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
   
   let botFood=null, nd=Infinity;
   let botFoods = [...trFoods];
@@ -2154,7 +2179,8 @@ class STWSnake {
     let nx=this.x+Math.cos(this.angle)*spd;
     let ny=this.y+Math.sin(this.angle)*spd;
     const dist=Math.hypot(nx-CX,ny-CY);
-    if(dist>r-SEGMENT_SIZE){
+    // Adjusted collision: scale radius to match inner visual edge
+    if(dist>r*0.89 - SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.4;
       nx=this.x+Math.cos(this.angle)*spd;
@@ -2188,7 +2214,7 @@ class STWFood {
     let tries=0;
     do{
       const angle=Math.random()*Math.PI*2;
-      const r=30+Math.random()*(STW_RADIUS*0.85);
+      const r=30+Math.random()*(STW_RADIUS*0.82);
       this.x=CX+Math.cos(angle)*r; this.y=CY+Math.sin(angle)*r; tries++;
     } while(tries<20&&isInsideGravityZone(this.x,this.y));
     this.alive=true;
@@ -2300,7 +2326,7 @@ class RivalSnake extends STWSnake {
   think(){
     this.actionFrame++;
     const head=this.segments[0];
-    const wallDist=STW_RADIUS-Math.hypot(head.x-CX,head.y-CY);
+    const wallDist=STW_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
     if(wallDist<STW_RADIUS*0.15){
       const ca=Math.atan2(CY-head.y,CX-head.x);
       let da=ca-this.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
@@ -2341,8 +2367,8 @@ class MongooseHunter {
     this.alive = true;
     this.spawnTime = Date.now();
     const angle = Math.random() * Math.PI * 2;
-    this.x = CX + Math.cos(angle) * (STW_RADIUS * 0.9);
-    this.y = CY + Math.sin(angle) * (STW_RADIUS * 0.9);
+    this.x = CX + Math.cos(angle) * (STW_RADIUS * 0.85);
+    this.y = CY + Math.sin(angle) * (STW_RADIUS * 0.85);
   }
   isExpired() { return Date.now() - this.spawnTime > STW_HUNTER_DURATION; }
   update() {
@@ -2545,7 +2571,6 @@ function startShrinkToWin(mode){
   const rivalLenEl = document.getElementById('stw-rival-len');
   const rivalCountEl = document.getElementById('stw-rival-count');
 
-  // BOT NORMALIZATION: Medium and Hard have equal physical speeds. Easy is slower.
   if(stwMode==='bot'){
     stwP2Snake=null;
     const ba=pa+Math.PI;
@@ -2627,7 +2652,7 @@ function stwBotThink(){
   if(!stwBotSnake||!stwBotSnake.alive) return;
   stwBotActionFrame++;
   const head=stwBotSnake.segments[0];
-  const wallDist=STW_RADIUS-Math.hypot(head.x-CX,head.y-CY);
+  const wallDist=STW_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
   const evadeDist = stwBotDiff === 'hard' ? STW_RADIUS * 0.18 : STW_RADIUS * 0.12;
   
   if(wallDist < evadeDist){
@@ -2636,7 +2661,6 @@ function stwBotThink(){
     stwBotSnake.turn(Math.sign(da)*1.0); return;
   }
   
-  // HAZARD AVOIDANCE BUG FIX: Steer *away* from hazard, not towards the center.
   const avoidZone = stwBotDiff === 'hard' ? 45 : (stwBotDiff === 'medium' ? 35 : 20);
   let hazard = null;
   for (let gz of stwGravityZones) {
@@ -2653,11 +2677,10 @@ function stwBotThink(){
     let da = hazA - stwBotSnake.angle; 
     while(da > Math.PI) da -= Math.PI*2; 
     while(da < -Math.PI) da += Math.PI*2;
-    stwBotSnake.turn(-Math.sign(da) * 1.2); // Notice the negative sign: steer away!
+    stwBotSnake.turn(-Math.sign(da) * 1.2); 
     return;
   }
   
-  // SCALING BY CALCULATION INTERVAL: Speed remains identical.
   let di = stwBotDiff === 'hard' ? 5 : (stwBotDiff === 'medium' ? 15 : 25);
   if(stwBotActionFrame-stwBotLastDecision < di){ stwBotChaseFood(); return; }
   stwBotLastDecision=stwBotActionFrame;
@@ -2675,7 +2698,6 @@ function stwBotChaseFood(){
   const a=Math.atan2(stwBotTargetFood.y-head.y,stwBotTargetFood.x-head.x);
   let da=a-stwBotSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
   
-  // ORBIT BREAKER BUG FIX: If closely orbiting food because of turn radius, widen approach slightly to break loop.
   if (distToFood < 50 && Math.abs(da) > 1.2) {
       stwBotSnake.turn(-Math.sign(da) * 0.8);
       return;
