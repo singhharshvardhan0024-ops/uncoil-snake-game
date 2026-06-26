@@ -379,6 +379,8 @@ canvas{display:block;position:absolute;top:0;left:0}
       <li>Gravity Zones 🌀 teleport you instantly — avoid them!</li>
       <li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li>
       <li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li>
+      <li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li>
+      <li>Hurdles alternate, appearing for a brief duration followed by a wait</li>
       <li>Pulito Sandstorm 🌪️ pulls your serpent towards its center and deviates your path — try to escape!</li>
     </div>
     <button class="btn" style="margin-top:20px" onclick="showScreen('screen-menu')">← BACK</button>
@@ -404,29 +406,6 @@ canvas{display:block;position:absolute;top:0;left:0}
 const arenaImage = new Image();
 // Ensure your file in E:\uncoil is named exactly "hud_border.png"
 arenaImage.src = 'hud_border.png';
-
-// --- AUDIO SYSTEM ---
-let botBgMusic = new Audio('Gravity_Zone.mp3');
-botBgMusic.loop = true;
-botBgMusic.volume = 0.7;
-
-botBgMusic.addEventListener('error', function() {
-    console.warn("Local file 'Gravity_Zone.mp3' not found. Falling back to an online test track so you know the code works.");
-    botBgMusic.src = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
-});
-
-function playBotMusic() {
-    botBgMusic.currentTime = 0;
-    let playPromise = botBgMusic.play();
-    if (playPromise !== undefined) {
-        playPromise.catch(e => console.warn("Browser blocked audio:", e));
-    }
-}
-
-function stopMusic() {
-    botBgMusic.pause();
-}
-// ---------------------
 
 const BG = document.getElementById('bg');
 const GC = document.getElementById('game');
@@ -490,7 +469,6 @@ function showScreen(id){
     if(stwAnimFrame) { cancelAnimationFrame(stwAnimFrame); stwAnimFrame = null; }
     ctx.clearRect(0, 0, W, H);
     particles = [];
-    stopMusic();
   }
 }
 
@@ -500,7 +478,6 @@ function pauseGame() {
   document.getElementById('screen-pause').classList.remove('hidden');
   document.getElementById('pause-about-box').classList.add('hidden');
   document.getElementById('btn-pause').classList.add('hidden');
-  botBgMusic.pause();
 }
 
 function resumeGame() {
@@ -535,10 +512,6 @@ function resumeGame() {
   isPaused = false;
   document.getElementById('screen-pause').classList.add('hidden');
   if(!inTransition) document.getElementById('btn-pause').classList.remove('hidden');
-  
-  if (currentScreen === 'screen-game' && gameMode === 'bot') botBgMusic.play().catch(()=>{});
-  if (currentScreen === 'screen-tr-game' && trGameMode === 'bot') botBgMusic.play().catch(()=>{});
-  if (currentScreen === 'screen-stw-game' && stwMode === 'bot') botBgMusic.play().catch(()=>{});
 }
 
 function restartCurrentGame() {
@@ -634,6 +607,86 @@ const SNAKE_CONFIGS={
 
 const predatorCam = { x: 0, y: 0 };
 
+// --- PROCEDURAL SNAKE RENDERER ---
+function renderSnakeBody(ctx, snake) {
+  if(!snake.alive) return;
+  const isPink = (snake.color === '#f0a' || snake.color === '#ff3300'); // Target Leviathan and Rivals for the aggressive styling
+  
+  ctx.save();
+
+  // Draw segments
+  for(let i = snake.segments.length - 1; i >= 0; i--) {
+    const s = snake.segments[i];
+    // Taper the tail
+    const taper = Math.max(0.25, 1 - (i / snake.segments.length) * 0.75);
+    const r = SEGMENT_SIZE * 1.1 * taper;
+
+    // Outer Shell & Glow
+    ctx.shadowColor = snake.glow;
+    ctx.shadowBlur = isPink ? 20 : 12; // Brighter bloom for the aggressive pink serpent
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2);
+    ctx.fillStyle = snake.color;
+    ctx.fill();
+
+    // Inner White Energy Core
+    ctx.shadowBlur = isPink ? 10 : 5;
+    ctx.shadowColor = '#fff';
+    ctx.beginPath(); ctx.arc(s.x, s.y, r * (isPink ? 0.3 : 0.45), 0, Math.PI*2); // Sharper core for pink
+    ctx.fillStyle = '#ffffff'; 
+    ctx.fill();
+  }
+
+  // Draw Custom Head Design
+  if (snake.segments.length > 0) {
+    const headX = snake.x;
+    const headY = snake.y;
+    const headR = SEGMENT_SIZE * 1.6;
+
+    // Head Shell
+    ctx.shadowColor = snake.glow; 
+    ctx.shadowBlur = isPink ? 25 : 15;
+    ctx.beginPath(); ctx.arc(headX, headY, headR, 0, Math.PI*2);
+    ctx.fillStyle = snake.color; 
+    ctx.fill();
+
+    // Glowing Eye
+    const eyeX = headX + Math.cos(snake.angle) * (headR * 0.3);
+    const eyeY = headY + Math.sin(snake.angle) * (headR * 0.3);
+    ctx.beginPath(); ctx.arc(eyeX, eyeY, headR * (isPink ? 0.35 : 0.45), 0, Math.PI*2);
+    ctx.fillStyle = '#ffffff'; 
+    ctx.shadowColor = '#ffffff'; 
+    ctx.shadowBlur = isPink ? 15 : 8; 
+    ctx.fill();
+
+    // Holographic Energy Halo Ring
+    ctx.beginPath();
+    if(ctx.ellipse) {
+      // Pink gets a slightly tilted, sharper aerodynamic halo
+      ctx.ellipse(headX, headY, headR * 1.6, headR * (isPink ? 0.4 : 0.6), snake.angle + (isPink ? 0.15 : 0), 0, Math.PI*2);
+    } else {
+      ctx.arc(headX, headY, headR * 1.2, 0, Math.PI*2);
+    }
+    // Set ring color based on snake color
+    let ringColor = '#ffffff';
+    if(snake.color === '#0ff') ringColor = '#88ffff';
+    if(snake.color === '#f0a') ringColor = '#ff88ff';
+    if(snake.color === '#ff6b35') ringColor = '#ffaa88';
+
+    ctx.strokeStyle = ringColor; 
+    ctx.lineWidth = isPink ? 2.5 : 2; 
+    ctx.stroke();
+  }
+
+  // Hit Cooldown Visual (Damage flash)
+  if(snake.hitCooldown > 0 && snake.hitCooldown % 4 < 2){
+    ctx.beginPath(); ctx.arc(snake.x, snake.y, SEGMENT_SIZE * 2.5, 0, Math.PI*2);
+    ctx.strokeStyle = snake.glow; ctx.lineWidth = 2; ctx.globalAlpha = .5; ctx.stroke();
+  }
+
+  ctx.restore();
+}
+// ---------------------------------
+
 class Snake {
   constructor(cfg,x,y,angle,isP2){
     this.cfg=cfg; this.x=x; this.y=y; this.angle=angle; this.isP2=isP2;
@@ -656,7 +709,6 @@ class Snake {
     let ny=this.y+Math.sin(this.angle)*spd;
     const dist=Math.hypot(nx-CX,ny-CY);
     
-    // Adjusted collision: scale radius to match inner visual edge of the border image
     if(dist>PREDATOR_RADIUS*0.89 - SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.5;
@@ -670,20 +722,7 @@ class Snake {
     while(this.segments.length>this.cfg.length) this.segments.pop();
   }
   draw(){
-    if(!this.alive) return;
-    ctx.save(); ctx.shadowColor=this.glow; ctx.shadowBlur=16;
-    for(let i=this.segments.length-1;i>=0;i--){
-      const s=this.segments[i];
-      const r=SEGMENT_SIZE * 1.1; 
-      ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
-      ctx.fillStyle=this.color; 
-      ctx.fill();
-    }
-    if(this.hitCooldown>0&&this.hitCooldown%4<2){
-      ctx.beginPath(); ctx.arc(this.x,this.y,SEGMENT_SIZE*2.5,0,Math.PI*2);
-      ctx.strokeStyle=this.glow; ctx.lineWidth=2; ctx.globalAlpha=.5; ctx.stroke();
-    }
-    ctx.restore();
+    renderSnakeBody(ctx, this);
   }
 }
 
@@ -864,7 +903,6 @@ function startGame(){
   showScreen('screen-game');
   initBgParticles();
   predRound = 1; predP1Wins = 0; predP2Wins = 0;
-  if (gameMode === 'bot') playBotMusic(); else stopMusic();
   startPredatorRound();
 }
 function restartGame(){
@@ -1395,20 +1433,7 @@ class TRSnake {
     while(this.segments.length>this.length) this.segments.pop();
   }
   draw(){
-    if(!this.alive) return;
-    ctx.save(); ctx.shadowColor=this.glow; ctx.shadowBlur=14;
-    for(let i=this.segments.length-1;i>=0;i--){
-      const s=this.segments[i];
-      const r=SEGMENT_SIZE * 1.1; 
-      ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
-      ctx.fillStyle=this.color; 
-      ctx.fill();
-    }
-    if(this.hitCooldown>0&&this.hitCooldown%4<2){
-      ctx.beginPath(); ctx.arc(this.x,this.y,SEGMENT_SIZE*2.5,0,Math.PI*2);
-      ctx.strokeStyle=this.glow; ctx.lineWidth=2; ctx.globalAlpha=.5; ctx.stroke();
-    }
-    ctx.restore();
+    renderSnakeBody(ctx, this);
   }
 }
 
@@ -1464,8 +1489,6 @@ function startTailRemoval(){
   showScreen('screen-tr-game');
   document.getElementById('btn-pause').classList.remove('hidden');
 
-  if (trGameMode === 'bot') playBotMusic(); else stopMusic();
-  
   current_TR_RADIUS = (trVariant === 'gate' || trVariant === 'survival') ? TR_RADIUS * 1.25 : TR_RADIUS;
 
   if (trVariant === 'gate' || trVariant === 'survival') {
@@ -2191,16 +2214,7 @@ class STWSnake {
     while(this.segments.length>this.length) this.segments.pop();
   }
   draw(){
-    if(!this.alive) return;
-    ctx.save(); ctx.shadowColor=this.glow; 
-    for(let i=this.segments.length-1;i>=0;i--){
-      const s=this.segments[i]; 
-      const r=SEGMENT_SIZE * 1.1; 
-      ctx.beginPath(); ctx.arc(s.x,s.y,r,0,Math.PI*2);
-      ctx.fillStyle=this.color; 
-      ctx.fill();
-    }
-    ctx.restore();
+    renderSnakeBody(ctx, this);
   }
 }
 
@@ -2550,8 +2564,6 @@ function enforceOrbit(snake, bh) {
 function startShrinkToWin(mode){
   STW_RADIUS = Math.min(W,H)*0.88;
   stwMode=mode; stwActive=true;
-
-  if (stwMode === 'bot') playBotMusic(); else stopMusic();
 
   stwFoods=[]; stwGravityZones=[]; stwBlackHoles=[]; stwRivals=[]; stwHunters=[]; stwPulitos=[]; particles=[];
   stwGravityEncounters=0; stwRivalsOutperformed=0;
