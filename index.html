@@ -77,6 +77,8 @@ canvas{display:block;position:absolute;top:0;left:0}
 .gravity-zone-indicator{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:3px;color:#f0a;pointer-events:none;animation:blink 0.6s infinite}
 </style></head>
 <body>
+<audio id="main-music" src="Main_theme.mp3" loop autoplay preload="auto"></audio>
+
 <canvas id="bg"></canvas>
 <canvas id="game"></canvas>
 
@@ -404,7 +406,6 @@ canvas{display:block;position:absolute;top:0;left:0}
 </div><script>
 // --- IMAGE LOAD ASSET ---
 const arenaImage = new Image();
-// Ensure your file in E:\uncoil is named exactly "hud_border.png"
 arenaImage.src = 'hud_border.png';
 
 const BG = document.getElementById('bg');
@@ -435,6 +436,33 @@ function toggleSetting(k){
 }
 
 const GAME_SCREENS = new Set(['screen-game','screen-tr-game','screen-stw-game']);
+
+// --- AUDIO SETUP ---
+const mainTheme = document.getElementById('main-music');
+
+function startMenuMusic() {
+  if (!GAME_SCREENS.has(currentScreen) && mainTheme.paused) {
+    mainTheme.play().catch(e => {
+        console.warn("Browser prevented audio autoplay. Interaction required.", e);
+    });
+  }
+}
+
+function stopMenuMusic() {
+  mainTheme.pause();
+  mainTheme.currentTime = 0;
+}
+
+// Force attempt instantly on script load
+window.addEventListener('load', () => {
+    startMenuMusic();
+});
+
+// Fallback listener: starts music on absolutely any interaction anywhere
+document.addEventListener('click', startMenuMusic);
+document.addEventListener('keydown', startMenuMusic);
+document.addEventListener('touchstart', startMenuMusic, {passive: true});
+// -------------------
 
 let currentScreen = 'screen-menu';
 let isPaused = false;
@@ -469,6 +497,7 @@ function showScreen(id){
     if(stwAnimFrame) { cancelAnimationFrame(stwAnimFrame); stwAnimFrame = null; }
     ctx.clearRect(0, 0, W, H);
     particles = [];
+    startMenuMusic(); // Start audio when returning to menus
   }
 }
 
@@ -901,6 +930,7 @@ function initPositions(){
 }
 function startGame(){
   showScreen('screen-game');
+  stopMenuMusic();
   initBgParticles();
   predRound = 1; predP1Wins = 0; predP2Wins = 0;
   startPredatorRound();
@@ -1487,6 +1517,7 @@ const trBot={ actionFrame:0, lastDecisionFrame:0, targetFood:null, reactionDelay
 
 function startTailRemoval(){
   showScreen('screen-tr-game');
+  stopMenuMusic();
   document.getElementById('btn-pause').classList.remove('hidden');
 
   current_TR_RADIUS = (trVariant === 'gate' || trVariant === 'survival') ? TR_RADIUS * 1.25 : TR_RADIUS;
@@ -2541,6 +2572,7 @@ function stwSelectSnake(t){
 
 function confirmStartSTW(){
   showScreen('screen-stw-game');
+  stopMenuMusic();
   startShrinkToWin(stwPendingMode);
 }
 
