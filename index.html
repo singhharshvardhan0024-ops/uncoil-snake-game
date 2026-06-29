@@ -421,7 +421,7 @@ function resize() {
   BG.width = GC.width = W; BG.height = GC.height = H;
   CX = W/2; CY = H/2;
   RADIUS = Math.min(W,H)*0.42;
-  PREDATOR_RADIUS = RADIUS * 1.161572; 
+  PREDATOR_RADIUS = (RADIUS * 1.161572) * 1.25; 
   TR_RADIUS = RADIUS * 1.11803398875;
   current_TR_RADIUS = TR_RADIUS; 
 }
@@ -441,7 +441,8 @@ const GAME_SCREENS = new Set(['screen-game','screen-tr-game','screen-stw-game'])
 const mainTheme = document.getElementById('main-music');
 
 function startMenuMusic() {
-  if (!GAME_SCREENS.has(currentScreen) && mainTheme.paused) {
+  // Check if we are on a valid menu screen and specifically EXCLUDE the result screen
+  if (!GAME_SCREENS.has(currentScreen) && currentScreen !== 'screen-result' && mainTheme.paused) {
     mainTheme.play().catch(e => {
         console.warn("Browser prevented audio autoplay. Interaction required.", e);
     });
@@ -497,7 +498,7 @@ function showScreen(id){
     if(stwAnimFrame) { cancelAnimationFrame(stwAnimFrame); stwAnimFrame = null; }
     ctx.clearRect(0, 0, W, H);
     particles = [];
-    startMenuMusic(); // Start audio when returning to menus
+    startMenuMusic(); // Start audio when returning to menus (ignores screen-result)
   }
 }
 
@@ -630,8 +631,8 @@ function setDiff(d,btn){
 
 const SEGMENT_SIZE=8;
 const SNAKE_CONFIGS={
-  small:{ length:24, speed:3.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
-  big:  { length:24, speed:3.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
+  small:{ length:34, speed:3.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
+  big:  { length:34, speed:3.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 
 const predatorCam = { x: 0, y: 0 };
@@ -1593,7 +1594,7 @@ function startTailRemoval(){
       
       survivalChamberFoods = [];
       for(let i=0; i<2; i++) {
-          for(let j=0; j<20; j++) {
+          for(let j=0; j<10; j++) {
               let a = Math.random() * Math.PI * 2;
               let fr = Math.random() * (rc - 15);
               let f = new TRFood(survivalChambers[i].x + Math.cos(a)*fr, survivalChambers[i].y + Math.sin(a)*fr, 'red');
