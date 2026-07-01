@@ -421,7 +421,7 @@ function resize() {
   BG.width = GC.width = W; BG.height = GC.height = H;
   CX = W/2; CY = H/2;
   RADIUS = Math.min(W,H)*0.42;
-  PREDATOR_RADIUS = (RADIUS * 1.161572) * 1.25; 
+  PREDATOR_RADIUS = ((RADIUS * 1.161572) * 1.25) * Math.sqrt(0.85); // Reduced area by 15%
   TR_RADIUS = RADIUS * 1.11803398875;
   current_TR_RADIUS = TR_RADIUS; 
 }
@@ -1558,7 +1558,7 @@ function startTailRemoval(){
       let types = ['green', 'green', 'green', 'red'].sort(() => Math.random() - 0.5);
       trChamberFoods = [];
       for(let i=0; i<4; i++) {
-          for(let j=0; j<10; j++) {
+          for(let j=0; j<22; j++) {
               let a = Math.random() * Math.PI * 2;
               let fr = Math.sqrt(Math.random()) * (rc - 15);
               let f = new TRFood(gateChambers[i].x + Math.cos(a)*fr, gateChambers[i].y + Math.sin(a)*fr, types[i]);
@@ -1851,17 +1851,17 @@ function trGameLoop(){
       if (gateState === 'closed') {
           ctx.fillStyle = '#0ff';
           ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
-          ctx.fillText(`GATES OPEN IN: ${remain}`, CX, CY - current_TR_RADIUS + 40);
+          ctx.fillText(`GATES OPEN IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       } else if (gateState === 'open_closing') {
           ctx.fillStyle = '#f04';
           ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
           if (remain % 2 === 0 || remain < 5) {
-              ctx.fillText(`GATES CLOSE IN: ${remain}`, CX, CY - current_TR_RADIUS + 40);
+              ctx.fillText(`GATES CLOSE IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
           }
       } else if (gateState === 'open_idle') {
           ctx.fillStyle = '#0f8';
           ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
-          ctx.fillText(`GATES OPEN - ENTER A CHAMBER`, CX, CY - current_TR_RADIUS + 40);
+          ctx.fillText(`GATES OPEN - ENTER A CHAMBER`, CX, CY - current_TR_RADIUS + 80);
       }
       ctx.restore();
   } else if (trVariant === 'survival') {
@@ -1872,20 +1872,20 @@ function trGameLoop(){
       let remain = Math.max(0, Math.ceil((survivalTimerEnd - Date.now()) / 1000));
       if (survivalState === 'closed_initial') {
           ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
-          ctx.fillText(`GATES OPEN IN: ${remain}`, CX, CY - current_TR_RADIUS + 40);
+          ctx.fillText(`GATES OPEN IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       } else if (survivalState === 'open_closing') {
           ctx.fillStyle = '#f04'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
-          if (remain % 2 === 0 || remain < 5) ctx.fillText(`GATES CLOSE IN: ${remain}`, CX, CY - current_TR_RADIUS + 40);
+          if (remain % 2 === 0 || remain < 5) ctx.fillText(`GATES CLOSE IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       } else if (survivalState === 'closed_trapped') {
           ctx.fillStyle = '#f04'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
-          ctx.fillText(`TRAPPED: ${remain}`, CX, CY - current_TR_RADIUS + 40);
+          ctx.fillText(`TRAPPED: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       } else if (survivalState === 'open_escape') {
           ctx.fillStyle = '#0f8'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
-          ctx.fillText(`ESCAPE PHASE: ${remain}`, CX, CY - current_TR_RADIUS + 40);
+          ctx.fillText(`ESCAPE PHASE: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       } else if (survivalState === 'open_idle') {
           ctx.fillStyle = '#0f8';
           ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
-          ctx.fillText(`GATES OPEN - CHAMBERS ACTIVE`, CX, CY - current_TR_RADIUS + 40);
+          ctx.fillText(`GATES OPEN - CHAMBERS ACTIVE`, CX, CY - current_TR_RADIUS + 80);
       }
       ctx.restore();
   }
@@ -2066,6 +2066,13 @@ function trCheckFoodCollision(now){
               else delta=trGameMode==='local'?(f.type==='red'?-4:5):(f.type==='red'?dc.redEffect:dc.greenEffect);
               eater.setLength(eater.length+delta); eater.foodEaten++;
               addParticles(f.x,f.y,f.type==='red'?'#f44':'#4f4',16); triggerShake();
+
+              let c = gateChambers[f.chamberIndex];
+              let a = Math.random() * Math.PI * 2;
+              let fr = Math.sqrt(Math.random()) * (c.r - 15);
+              f.x = c.x + Math.cos(a)*fr;
+              f.y = c.y + Math.sin(a)*fr;
+              f.alive = true;
           }
       });
   } else if (trVariant === 'survival') {
