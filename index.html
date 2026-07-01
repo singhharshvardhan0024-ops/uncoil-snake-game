@@ -362,7 +362,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <h2>🚪 MODE 2 — GATE ARENA</h2>
       <p>Tail Removal rules apply, but with expanding chambers!</p>
       <li>Gates open after 25 seconds allowing access to 4 chambers.</li>
-      <li>Find the green food in one of the 4 chambers. The other 3 contain red food!</li>
+      <li>Classic Red/Green food will continue to spawn in the main arena!</li>
       <li>Entering a chamber starts a 12-second lockdown timer.</li>
       <li>If caught in a chamber or gate when it closes, you are safely teleported to the center.</li>
       <h2>⏳ MODE 3 — SURVIVAL CHAMBERS</h2>
@@ -578,11 +578,23 @@ function showAboutMode() {
 
 function enforceSolidBodies(sA, sB, solidRatio) {
   if(!sA || !sA.alive || !sB || !sB.alive) return;
+  
+  // Fast bounding check for long snakes to reduce lag
+  if (Math.abs(sA.x - sB.x) > sB.segments.length * SEGMENT_SIZE + 50 ||
+      Math.abs(sA.y - sB.y) > sB.segments.length * SEGMENT_SIZE + 50) {
+      return;
+  }
+
   let limitB = Math.floor(sB.segments.length * solidRatio);
 
-  for (let i = 0; i < limitB; i++) {
+  // Stepping by 2 halves the checks, significantly improving performance for STW mode
+  for (let i = 0; i < limitB; i += 2) {
     let s = sB.segments[i];
     if(!s) continue;
+    
+    // Fast AABB check before hypot
+    if (Math.abs(sA.x - s.x) > 20 || Math.abs(sA.y - s.y) > 20) continue;
+
     let dist = Math.hypot(sA.x - s.x, sA.y - s.y);
     let minDist = SEGMENT_SIZE * 1.8; 
     if (dist < minDist && dist > 0) {
@@ -626,8 +638,8 @@ function setDiff(d,btn){
 
 const SEGMENT_SIZE=8;
 const SNAKE_CONFIGS={
-  small:{ length:34, speed:3.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
-  big:  { length:34, speed:3.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
+  small:{ length:39, speed:3.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
+  big:  { length:39, speed:3.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 
 const predatorCam = { x: 0, y: 0 };
@@ -637,25 +649,24 @@ function renderSnakeBody(ctx, snake) {
   const isPink = (snake.color === '#f0a' || snake.color === '#ff3300'); 
   
   ctx.save();
+  // Turn off shadow blur for body segments to eliminate lag in large arenas
+  ctx.shadowBlur = 0;
 
   for(let i = snake.segments.length - 1; i >= 0; i--) {
     const s = snake.segments[i];
     const taper = Math.max(0.25, 1 - (i / snake.segments.length) * 0.75);
     const r = SEGMENT_SIZE * 1.1 * taper;
 
-    ctx.shadowColor = snake.glow;
-    ctx.shadowBlur = isPink ? 20 : 12; 
     ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2);
     ctx.fillStyle = snake.color;
     ctx.fill();
 
-    ctx.shadowBlur = isPink ? 10 : 5;
-    ctx.shadowColor = '#fff';
     ctx.beginPath(); ctx.arc(s.x, s.y, r * (isPink ? 0.3 : 0.45), 0, Math.PI*2); 
     ctx.fillStyle = '#ffffff'; 
     ctx.fill();
   }
 
+  // Head ALWAYS has full shadow
   if (snake.segments.length > 0) {
     const headX = snake.x;
     const headY = snake.y;
@@ -1501,7 +1512,7 @@ function startTailRemoval(){
 
   current_TR_RADIUS = (trVariant === 'gate' || trVariant === 'survival') ? TR_RADIUS * 1.25 : TR_RADIUS;
 
-  if (trVariant === 'gate' || trVariant === 'survival') {
+  if (trVariant === 'survival') {
       document.getElementById('food-timer-wrap').classList.add('hidden');
   } else {
       document.getElementById('food-timer-wrap').classList.remove('hidden');
@@ -1539,10 +1550,12 @@ function startTailRemoval(){
           {dir: 'top', x: CX, y: CY - current_TR_RADIUS - pad - rc, r: rc, discovered: false},
           {dir: 'bot', x: CX, y: CY + current_TR_RADIUS + pad + rc, r: rc, discovered: false},
           {dir: 'left', x: CX - current_TR_RADIUS - pad - rc, y: CY, r: rc, discovered: false},
-          {dir: 'right', x: CX + current_TR_RADIUS + pad - rc, y: CY, r: rc, discovered: false}
+          {dir: 'right', x: CX + current_TR_RADIUS + pad + rc, y: CY, r: rc, discovered: false}
       ];
-      let types = ['red', 'red', 'red', 'green'].sort(() => Math.random() - 0.5);
+      gateState = 'closed';
+      gateTimerEnd = Date.now() + 25000;
       
+      let types = ['green', 'green', 'green', 'red'].sort(() => Math.random() - 0.5);
       trChamberFoods = [];
       for(let i=0; i<4; i++) {
           for(let j=0; j<10; j++) {
@@ -1557,9 +1570,6 @@ function startTailRemoval(){
 
       spawnTRFood(trSnake1, 'p1');
       spawnTRFood(trSnake2, 'p2');
-      
-      gateState = 'closed';
-      gateTimerEnd = Date.now() + 25000;
   } else if (trVariant === 'survival') {
       let rc = current_TR_RADIUS * 0.45 * 1.15;
       let pad = 40; 
@@ -1699,10 +1709,8 @@ function trGameLoop(){
                   }
               });
 
-              trChamberFoods.forEach(cf => {
-                  cf.alive = true;
-              });
               gateChambers.forEach(c => c.discovered = false);
+              trChamberFoods.forEach(cf => { cf.alive = true; });
           }
       }
   } else if (trVariant === 'survival') {
@@ -1885,7 +1893,7 @@ function trGameLoop(){
   ctx.restore(); 
   ctx.restore(); 
 
-  if (trVariant === 'gate' || trVariant === 'survival') {
+  if (trVariant === 'survival') {
       document.getElementById('food-timer-wrap').classList.add('hidden');
   } else {
       const pf=trFoods.find(f=>f.owner==='p1'&&f.alive);
@@ -2094,7 +2102,7 @@ function trCheckFoodCollision(now){
 }
 
 function trManageFoods(now){
-  if (trVariant === 'gate' || (trVariant === 'survival' && survivalState === 'closed_trapped')) return; 
+  if (trVariant === 'survival' && survivalState === 'closed_trapped') return; 
   trFoods.forEach(f=>{ if(!f.alive) return; if(now-f.spawnTime>TR_FOOD_LIFETIME){ f.alive=false; spawnTRFood(f.owner==='p1'?trSnake1:trSnake2,f.owner); }});
   trFoods=trFoods.filter(f=>f.alive);
 }
