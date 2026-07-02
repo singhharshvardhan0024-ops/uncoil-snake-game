@@ -379,11 +379,11 @@ canvas{display:block;position:absolute;top:0;left:0}
       <h2>🌀 MODE 5 — SHRINK TO WIN</h2>
       <p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p>
       <li>Gravity Zones 🌀 teleport you instantly — avoid them!</li>
-      <li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li>
+      <li>Black Holes 🕳️ directly trap you in an orbit and pull you in — wait them out!</li>
       <li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li>
       <li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li>
       <li>Hurdles alternate, appearing for a brief duration followed by a wait</li>
-      <li>Pulito Sandstorm 🌪️ pulls your serpent towards its center and deviates your path — try to escape!</li>
+      <li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>
     </div>
     <button class="btn" style="margin-top:20px" onclick="showScreen('screen-menu')">← BACK</button>
   </div>
@@ -572,7 +572,7 @@ function showAboutMode() {
   } else if (trActive && trVariant === 'survival') {
     box.innerHTML = `<h2>⏳ MODE 3 — SURVIVAL CHAMBERS</h2><p>Tail Removal survival challenge!</p><li>Gates open after 25s.</li><li>Chambers hold only RED food (spread evenly).</li><li>Entering a chamber starts a 12s lockdown timer.</li><li>When closed, you are TRAPPED and main circle food vanishes.</li><li>Survive until gates reopen!</li>`;
   } else if (stwActive) {
-    box.innerHTML = `<h2>` + `🌀 MODE 4 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Sandstorm 🌪️ pulls your serpent towards its center and deviates your path — try to escape!</li>`;
+    box.innerHTML = `<h2>` + `🌀 MODE 4 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
   }
 }
 
@@ -599,9 +599,9 @@ function enforceSolidBodies(sA, sB, solidRatio) {
     let minDist = SEGMENT_SIZE * 1.8; 
     if (dist < minDist && dist > 0) {
       let overlap = minDist - dist;
-      let angle = Math.atan2(sA.y - s.y, sA.x - s.x);
-      sA.x += Math.cos(angle) * overlap * 0.5;
-      sA.y += Math.sin(angle) * overlap * 0.5;
+      // Bounce back in the direction from where it came (opposite to its current moving angle)
+      sA.x -= Math.cos(sA.angle) * (overlap * 1.5);
+      sA.y -= Math.sin(sA.angle) * (overlap * 1.5);
       if(sA.segments[0]) {
         sA.segments[0].x = sA.x;
         sA.segments[0].y = sA.y;
@@ -638,8 +638,8 @@ function setDiff(d,btn){
 
 const SEGMENT_SIZE=8;
 const SNAKE_CONFIGS={
-  small:{ length:39, speed:3.1, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
-  big:  { length:39, speed:3.1, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
+  small:{ length:54, speed:4.3, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
+  big:  { length:54, speed:4.3, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 
 const predatorCam = { x: 0, y: 0 };
@@ -1024,12 +1024,20 @@ function checkHit(attacker,defender){
   if(!attacker.alive || !defender.alive) return;
   if(attacker.hitCooldown>0) return;
   const head=attacker.segments[0];
-  const limit = Math.floor(defender.segments.length * 0.7);
+  const limit = Math.floor(defender.segments.length * 0.5);
   for(let i=2;i<limit;i++){
     const s=defender.segments[i];
     if(Math.hypot(head.x-s.x,head.y-s.y)<SEGMENT_SIZE*1.6){
       defender.hp--; attacker.hits++; attacker.dmgDealt++;
       attacker.hitCooldown=40; defender.hitCooldown=20;
+      
+      attacker.x -= Math.cos(attacker.angle) * 20; 
+      attacker.y -= Math.sin(attacker.angle) * 20;
+      if(attacker.segments[0]) {
+        attacker.segments[0].x = attacker.x;
+        attacker.segments[0].y = attacker.y;
+      }
+
       triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
       if(defender===snake2&&gameMode==='bot') onBotHit();
       if(defender.hp<=0){ finalSlowMo=true; finalSlowMoFrames=90; }
@@ -1068,8 +1076,8 @@ function gameLoop(){
 
   checkHit(snake1,snake2); checkHit(snake2,snake1);
   
-  enforceSolidBodies(snake1, snake2, 0.7);
-  enforceSolidBodies(snake2, snake1, 0.7);
+  enforceSolidBodies(snake1, snake2, 0.5);
+  enforceSolidBodies(snake2, snake1, 0.5);
 
   updateParticles();
   if(finalSlowMo){ 
@@ -1147,12 +1155,34 @@ function endPredatorMatch() {
     'predator');
 }
 
+document.addEventListener('keydown',e=>{ 
+  keys[e.key]=true; 
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight', ' '].includes(e.key)) e.preventDefault(); 
+  
+  if (e.key === ' ' && GAME_SCREENS.has(currentScreen)) {
+    if (!isPaused && (gameActive || trActive || stwActive)) {
+      pauseGame();
+    } else if (isPaused) {
+      resumeGame();
+    }
+  }
+});
+
+document.addEventListener('keyup',e=>{ keys[e.key]=false; });
+
 function handleInput(){
   if(keys['a']||keys['A']) snake1.turn(-1);
   if(keys['d']||keys['D']) snake1.turn(1);
+  if(keys['w']||keys['W']) snake1.speed = 6.0;
+  else if(keys['s']||keys['S']) snake1.speed = 3.0;
+  else snake1.speed = snake1.cfg.speed;
+
   if(gameMode==='local'){
     if(keys['ArrowLeft'])  snake2.turn(-1);
     if(keys['ArrowRight']) snake2.turn(1);
+    if(keys['ArrowUp']) snake2.speed = 6.0;
+    else if(keys['ArrowDown']) snake2.speed = 3.0;
+    else snake2.speed = snake2.cfg.speed;
   }
   if(inputDir1.x!==0||inputDir1.y!==0){
     const ta=Math.atan2(inputDir1.y,inputDir1.x);
@@ -1165,8 +1195,6 @@ function handleInput(){
     snake2.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
   }
 }
-document.addEventListener('keydown',e=>{ keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault(); });
-document.addEventListener('keyup',e=>{ keys[e.key]=false; });
 
 function drawArena(){
   const r=(stwActive&&STW_RADIUS)?STW_RADIUS:(gameActive?PREDATOR_RADIUS:(trActive?current_TR_RADIUS:RADIUS));
@@ -1627,23 +1655,8 @@ function spawnTRFood(snake,owner){
   const f=new TRFood(fx,fy,foodType); f.owner=owner; trFoods.push(f);
 }
 
-function trCheckHit(attacker, defender) {
-  if(!attacker.alive || !defender.alive) return;
-  if(attacker.hitCooldown > 0) return;
-  const head = attacker.segments[0];
-  const limit = Math.floor(defender.segments.length * 0.7); 
-  for(let i=2; i<limit; i++) {
-    const s = defender.segments[i];
-    if(Math.hypot(head.x - s.x, head.y - s.y) < SEGMENT_SIZE * 1.6) {
-      defender.setLength(defender.length - 1); 
-      attacker.hitCooldown = 40; 
-      defender.hitCooldown = 20;
-      triggerShake(); 
-      addParticles(s.x, s.y, attacker.color, 20);
-      break;
-    }
-  }
-}
+// Collisions disabled to allow smooth crossing in TR Mode
+// function trCheckHit(attacker, defender) { ... }
 
 function trGameLoop(){
   if(!trActive) return;
@@ -1816,11 +1829,11 @@ function trGameLoop(){
   
   trSnake1.update(); trSnake2.update();
 
-  trCheckHit(trSnake1, trSnake2);
-  trCheckHit(trSnake2, trSnake1);
-
-  enforceSolidBodies(trSnake1, trSnake2, 0.7);
-  enforceSolidBodies(trSnake2, trSnake1, 0.7);
+  // Disabled collisions for TR Mode to cross smoothly
+  // trCheckHit(trSnake1, trSnake2);
+  // trCheckHit(trSnake2, trSnake1);
+  // enforceSolidBodies(trSnake1, trSnake2, 0.7);
+  // enforceSolidBodies(trSnake2, trSnake1, 0.7);
 
   trCheckFoodCollision(now); trManageFoods(now);
   updateParticles(); trSnake1.draw(); trSnake2.draw();
@@ -1918,6 +1931,10 @@ function trGameLoop(){
 function trHandleInput(){
   if(keys['a']||keys['A']) trSnake1.turn(-1);
   if(keys['d']||keys['D']) trSnake1.turn(1);
+  if(keys['w']||keys['W']) trSnake1.speed = 6.0;
+  else if(keys['s']||keys['S']) trSnake1.speed = 3.0;
+  else trSnake1.speed = 4.3;
+
   if(trInputDir.x!==0||trInputDir.y!==0){
     const ta=Math.atan2(trInputDir.y,trInputDir.x);
     let da=ta-trSnake1.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
@@ -1926,6 +1943,10 @@ function trHandleInput(){
   if(trGameMode==='local'){
     if(keys['ArrowLeft']) trSnake2.turn(-1);
     if(keys['ArrowRight']) trSnake2.turn(1);
+    if(keys['ArrowUp']) trSnake2.speed = 6.0;
+    else if(keys['ArrowDown']) trSnake2.speed = 3.0;
+    else trSnake2.speed = 4.3;
+
     if(trInputDir2.x!==0||trInputDir2.y!==0){
       const ta=Math.atan2(trInputDir2.y,trInputDir2.x);
       let da=ta-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
@@ -2178,7 +2199,7 @@ class STWSnake {
   constructor(x,y,angle,color,glow, initLen = STW_INIT_LENGTH){
     this.x=x; this.y=y; this.angle=angle;
     this.color=color; this.glow=glow;
-    this.speed=4.2; this.turnSpeed=0.07;
+    this.speed=4.3; this.turnSpeed=0.07;
     this.length=initLen;
     this.segments=[];
     this.alive=true;
@@ -2426,32 +2447,20 @@ class MongooseHunter {
 }
 
 class Pulito {
-  constructor(targetSnake) {
-    this.target = targetSnake;
-    if (targetSnake && targetSnake.alive && targetSnake.segments.length > 0) {
-      const seg = targetSnake.segments[0];
-      this.x = seg.x;
-      this.y = seg.y;
-    } else {
-      const angle = Math.random() * Math.PI * 2;
-      const r = Math.random() * (STW_RADIUS * 0.7);
-      this.x = CX + Math.cos(angle) * r;
-      this.y = CY + Math.sin(angle) * r;
-    }
+  constructor() {
+    const angle = Math.random() * Math.PI * 2;
+    const r = Math.random() * (STW_RADIUS * 0.7);
+    this.x = CX + Math.cos(angle) * r;
+    this.y = CY + Math.sin(angle) * r;
     this.r = 60; 
     this.alive = true;
     this.spawnTime = Date.now();
-    this.duration = 5000;
+    this.duration = 10000;
+    this.particles = [];
   }
   isExpired() { return Date.now() - this.spawnTime > this.duration; }
   pull(snake) {
     if (!this.alive || !snake || !snake.alive) return;
-    
-    if (this.target && this.target.alive && this.target.segments.length > 0) {
-      const centerIdx = Math.floor(this.target.segments.length / 2);
-      this.x = this.target.segments[centerIdx].x;
-      this.y = this.target.segments[centerIdx].y;
-    }
     
     const head = snake.segments[0] || snake;
     const dx = this.x - head.x;
@@ -2467,26 +2476,89 @@ class Pulito {
   }
   draw() {
     if (!this.alive) return;
-    const age = (Date.now() - this.spawnTime) / this.duration;
-    const alpha = age < 0.2 ? (age/0.2) : age > 0.8 ? ((1-age)/0.2) : 1;
-    const t = Date.now() / 200;
-    ctx.save();
-    ctx.globalAlpha = alpha * 0.8;
-    ctx.translate(this.x, this.y);
-    ctx.rotate(t);
-    const grad = ctx.createRadialGradient(0,0,5, 0,0,this.r);
-    grad.addColorStop(0, 'rgba(139,69,19,0.9)'); 
-    grad.addColorStop(0.6, 'rgba(210,180,140,0.6)'); 
-    grad.addColorStop(1, 'transparent');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(0,0,this.r, 0, Math.PI*2); ctx.fill();
+    const age = Date.now() - this.spawnTime;
+    const alpha = age < 500 ? (age/500) : age > 9500 ? ((10000-age)/500) : 1;
+    const t = Date.now() / 150;
 
-    for(let i=0; i<8; i++) {
-        ctx.beginPath();
-        ctx.arc(Math.cos(t*i)*this.r*0.6, Math.sin(t*i)*this.r*0.6, 2, 0, Math.PI*2);
-        ctx.fillStyle = '#654321';
-        ctx.fill();
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(this.x, this.y);
+
+    // Update & Draw Particles (black smoke and floating elements)
+    if (Math.random() < 0.8) {
+        let angle = Math.random() * Math.PI * 2;
+        let dist = Math.random() * this.r * 1.5;
+        this.particles.push({
+            x: Math.cos(angle) * dist,
+            y: Math.sin(angle) * dist,
+            vx: Math.cos(angle + Math.PI/2) * 5 - Math.cos(angle) * 2,
+            vy: Math.sin(angle + Math.PI/2) * 5 - Math.sin(angle) * 2,
+            life: 1,
+            r: Math.random() * 8 + 4
+        });
     }
+    
+    this.particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        let dx = -p.x, dy = -p.y;
+        let d = Math.hypot(dx, dy) || 1;
+        p.vx += (dx/d) * 0.5;
+        p.vy += (dy/d) * 0.5;
+        p.life -= 0.015;
+
+        ctx.globalAlpha = Math.max(0, p.life) * alpha * 0.8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fillStyle = '#050011';
+        ctx.shadowColor = '#000';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+    });
+    this.particles = this.particles.filter(p => p.life > 0 && Math.hypot(p.x, p.y) > 5);
+
+    ctx.globalAlpha = alpha * 0.95;
+
+    // Dark Distortion Ring / Pulse
+    const pulse = Math.sin(t*0.5) * 20;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.r * 3 + pulse, 0, Math.PI * 2);
+    const ringGrad = ctx.createRadialGradient(0,0, this.r*0.2, 0,0, this.r*3+pulse);
+    ringGrad.addColorStop(0, 'rgba(0,0,0,1)');
+    ringGrad.addColorStop(0.4, 'rgba(10,0,20,0.8)');
+    ringGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ringGrad;
+    ctx.fill();
+
+    ctx.rotate(t * 0.25);
+
+    // Organic shadow tendrils (swirling black liquid)
+    ctx.fillStyle = '#03000a';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 20;
+    for (let i = 0; i < 9; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI * 2 / 9) * i + Math.sin(t*0.3) * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        let len = this.r * 2.2 + Math.sin(t * 1.2 + i) * 35;
+        let cp1x = len * 0.4 + Math.cos(t+i)*20;
+        let cp1y = len * 0.5 + Math.sin(t+i)*20;
+        ctx.bezierCurveTo(cp1x, cp1y, len*0.8, -len*0.2, len, 0);
+        ctx.bezierCurveTo(len*0.7, -len*0.5, cp1x*0.5, -len*0.3, 0, 0);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // Core Black Vortex
+    ctx.beginPath();
+    ctx.arc(0, 0, this.r * 1.1, 0, Math.PI * 2);
+    const coreGrad = ctx.createRadialGradient(0,0, 0, 0,0, this.r * 1.1);
+    coreGrad.addColorStop(0, '#000000');
+    coreGrad.addColorStop(0.5, '#050011');
+    coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = coreGrad;
+    ctx.fill();
+
     ctx.restore();
   }
 }
@@ -2603,7 +2675,7 @@ function startShrinkToWin(mode){
     const ba=pa+Math.PI;
     stwBotSnake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
     
-    stwBotSnake.speed = stwBotDiff === 'easy' ? 3.8 : 4.3;
+    stwBotSnake.speed = 4.3;
     stwBotSnake.turnSpeed = stwBotDiff === 'easy' ? 0.05 : 0.07;
     
     rivalLenEl.style.color = bCfg.c;
@@ -2659,6 +2731,10 @@ function startShrinkToWin(mode){
 function stwHandleInput(){
   if(keys['a']||keys['A']) stwPlayerSnake.turn(-1);
   if(keys['d']||keys['D']) stwPlayerSnake.turn(1);
+  if(keys['w']||keys['W']) stwPlayerSnake.speed = 6.0;
+  else if(keys['s']||keys['S']) stwPlayerSnake.speed = 3.0;
+  else stwPlayerSnake.speed = 4.3;
+
   if(stwInputDir.x!==0||stwInputDir.y!==0){
     const ta=Math.atan2(stwInputDir.y,stwInputDir.x);
     let da=ta-stwPlayerSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
@@ -2667,6 +2743,10 @@ function stwHandleInput(){
   if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) {
     if(keys['ArrowLeft']) stwP2Snake.turn(-1);
     if(keys['ArrowRight']) stwP2Snake.turn(1);
+    if(keys['ArrowUp']) stwP2Snake.speed = 6.0;
+    else if(keys['ArrowDown']) stwP2Snake.speed = 3.0;
+    else stwP2Snake.speed = 4.3;
+
     if(stwInputDir2.x!==0||stwInputDir2.y!==0){
       const ta=Math.atan2(stwInputDir2.y,stwInputDir2.x);
       let da=ta-stwP2Snake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
@@ -2736,23 +2816,8 @@ function stwBotChaseFood(){
   stwBotSnake.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(maxTurn,Math.abs(da)*1.6));
 }
 
-function stwCheckHit(attacker, defender) {
-  if(!attacker.alive || !defender.alive) return;
-  if(attacker.hitCooldown > 0) return;
-  const head = attacker.segments[0];
-  const limit = Math.floor(defender.segments.length * 0.7);
-  for(let i=2; i<limit; i++) {
-    const s = defender.segments[i];
-    if(Math.hypot(head.x - s.x, head.y - s.y) < SEGMENT_SIZE * 1.6) {
-      defender.setLength(defender.length - 1);
-      attacker.hitCooldown = 40; 
-      defender.hitCooldown = 20;
-      triggerShake(); 
-      addParticles(s.x, s.y, attacker.color, 20);
-      break;
-    }
-  }
-}
+// Collisions disabled to allow smooth crossing in STW Mode
+// function stwCheckHit(attacker, defender) { ... }
 
 function stwGameLoop(){
   if(!stwActive) return;
@@ -2860,18 +2925,16 @@ function stwGameLoop(){
       stwHurdleTimer = now + 10000;
     } else if(stwHurdleState === 'wait_pulito'){
       stwPulitos = [];
-      if (stwPlayerSnake && stwPlayerSnake.alive) stwPulitos.push(new Pulito(stwPlayerSnake));
-      
-      let p2Target = stwMode === 'bot' ? stwBotSnake : (stwMode === 'local' ? stwP2Snake : null);
-      if (p2Target && p2Target.alive) stwPulitos.push(new Pulito(p2Target));
-      else if (stwPlayerSnake && stwPlayerSnake.alive) stwPulitos.push(new Pulito(stwPlayerSnake)); 
+      stwPulitos.push(new Pulito());
+      let p2Exists = (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) || (stwMode === 'local' && stwP2Snake && stwP2Snake.alive);
+      if (p2Exists) stwPulitos.push(new Pulito());
       
       stwHurdleState = 'pulito';
-      stwHurdleTimer = now + 5000;
+      stwHurdleTimer = now + 10000;
       
       const el = document.getElementById('stw-event-label');
-      el.textContent = '🌪️ PULITO SANDSTORM!';
-      el.style.color = '#8b4513';
+      el.textContent = '🌪️ BLACK ANOMALY!';
+      el.style.color = '#888';
       el.classList.remove('hidden');
       setTimeout(()=> {
         el.classList.add('hidden');
@@ -2886,14 +2949,18 @@ function stwGameLoop(){
   stwBlackHoles=stwBlackHoles.filter(bh=>{ if(bh.isExpired()){ bh.alive=false; return false; } return true; });
   stwHunters=stwHunters.filter(h=>{ if(h.isExpired()){ h.alive=false; return false; } return true; });
   stwRivals=stwRivals.filter(r=>{ if(r.isExpired()){ stwRivalsOutperformed++; return false; } return true; });
-  stwPulitos=stwPulitos.filter(p=>{ if(p.isExpired()){ p.alive=false; return false; } return true; });
+  
+  stwPulitos=stwPulitos.filter(p=>{ 
+      if(p.isExpired()){ 
+          p.alive=false; 
+          while(stwFoods.length < 8) stwFoods.push(new STWFood());
+          return false; 
+      } 
+      return true; 
+  });
 
-  let playerTrapped = stwBlackHoles.some(bh => bh.target === stwPlayerSnake);
-  let botTrapped = stwBotSnake && stwBlackHoles.some(bh => bh.target === stwBotSnake);
-  let p2Trapped = stwP2Snake && stwBlackHoles.some(bh => bh.target === stwP2Snake);
-
-  if(!playerTrapped || (stwMode === 'local' && !p2Trapped)) stwHandleInput();
-  if(stwBotSnake && !botTrapped) stwBotThink();
+  stwHandleInput();
+  if(stwBotSnake) stwBotSnake.think();
 
   stwBlackHoles.forEach(bh => {
     if(!bh.alive) return;
@@ -2911,24 +2978,65 @@ function stwGameLoop(){
   if(stwP2Snake) stwP2Snake.update(STW_RADIUS);
   stwRivals.forEach(r=>{ r.think(); r.update(STW_RADIUS); });
   
-  if (stwMode === 'bot' && stwBotSnake) {
-      stwCheckHit(stwPlayerSnake, stwBotSnake);
-      stwCheckHit(stwBotSnake, stwPlayerSnake);
-      enforceSolidBodies(stwPlayerSnake, stwBotSnake, 0.7);
-      enforceSolidBodies(stwBotSnake, stwPlayerSnake, 0.7);
-  }
-  if (stwMode === 'local' && stwP2Snake) {
-      stwCheckHit(stwPlayerSnake, stwP2Snake);
-      stwCheckHit(stwP2Snake, stwPlayerSnake);
-      enforceSolidBodies(stwPlayerSnake, stwP2Snake, 0.7);
-      enforceSolidBodies(stwP2Snake, stwPlayerSnake, 0.7);
-  }
-  stwRivals.forEach(r => {
-      stwCheckHit(stwPlayerSnake, r);
-      stwCheckHit(r, stwPlayerSnake);
-      enforceSolidBodies(stwPlayerSnake, r, 0.7);
-      enforceSolidBodies(r, stwPlayerSnake, 0.7);
+  // Handle Pulito food suction
+  stwPulitos.forEach(p => {
+    if (!p.alive) return;
+    let age = Date.now() - p.spawnTime;
+    if (age < 5000) {
+      // Phase 1: Pull food
+      stwFoods.forEach(f => {
+        if (!f.alive) return;
+        let dx = p.x - f.x;
+        let dy = p.y - f.y;
+        let dist = Math.hypot(dx, dy);
+        if (dist < 20) {
+          f.alive = false;
+        } else {
+          let a = Math.atan2(dy, dx);
+          a += 0.5; // slight spiral
+          let speed = 1.5 + (1 - Math.min(dist, STW_RADIUS)/STW_RADIUS) * 15;
+          f.x += Math.cos(a) * speed;
+          f.y += Math.sin(a) * speed;
+          if (dist < 100) f.r = Math.max(1, STW_FOOD_RADIUS * (dist / 100));
+        }
+      });
+    } else {
+      // Phase 2: Destroy remaining food
+      stwFoods.forEach(f => f.alive = false);
+    }
   });
+
+  if (stwPulitos.some(p => p.alive)) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Override camera translation to fully cover the screen
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+      if (settings.shake) {
+          shakeX = (Math.random() - 0.5) * 4;
+          shakeY = (Math.random() - 0.5) * 4;
+      }
+  }
+  
+  // Disabled collisions for STW Mode to cross smoothly
+  // if (stwMode === 'bot' && stwBotSnake) {
+  //     stwCheckHit(stwPlayerSnake, stwBotSnake);
+  //     stwCheckHit(stwBotSnake, stwPlayerSnake);
+  //     enforceSolidBodies(stwPlayerSnake, stwBotSnake, 0.7);
+  //     enforceSolidBodies(stwBotSnake, stwPlayerSnake, 0.7);
+  // }
+  // if (stwMode === 'local' && stwP2Snake) {
+  //     stwCheckHit(stwPlayerSnake, stwP2Snake);
+  //     stwCheckHit(stwP2Snake, stwPlayerSnake);
+  //     enforceSolidBodies(stwPlayerSnake, stwP2Snake, 0.7);
+  //     enforceSolidBodies(stwP2Snake, stwPlayerSnake, 0.7);
+  // }
+  // stwRivals.forEach(r => {
+  //     stwCheckHit(stwPlayerSnake, r);
+  //     stwCheckHit(r, stwPlayerSnake);
+  //     enforceSolidBodies(stwPlayerSnake, r, 0.7);
+  //     enforceSolidBodies(r, stwPlayerSnake, 0.7);
+  // });
   
   stwHunters.forEach(h => {
     h.update();
@@ -2975,20 +3083,18 @@ function stwGameLoop(){
     });
   });
 
-  if(!playerTrapped) {
-    stwFoods.forEach(f=>{
-      if(!f.alive) return;
-      if(Math.hypot(stwPlayerSnake.x-f.x,stwPlayerSnake.y-f.y)<SEGMENT_SIZE+f.r){
-        f.alive=false;
-        stwPlayerSnake.setLength(stwPlayerSnake.length+STW_FOOD_SHRINK);
-        stwPlayerSnake.foodEaten++;
-        addParticles(f.x,f.y, '#f44', 16); triggerShake();
-        setTimeout(()=>{ if(stwActive){ stwFoods.push(new STWFood()); }},400);
-      }
-    });
-  }
+  stwFoods.forEach(f=>{
+    if(!f.alive) return;
+    if(Math.hypot(stwPlayerSnake.x-f.x,stwPlayerSnake.y-f.y)<SEGMENT_SIZE+f.r){
+      f.alive=false;
+      stwPlayerSnake.setLength(stwPlayerSnake.length+STW_FOOD_SHRINK);
+      stwPlayerSnake.foodEaten++;
+      addParticles(f.x,f.y, '#f44', 16); triggerShake();
+      setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
+    }
+  });
   
-  if(stwBotSnake && !botTrapped){
+  if(stwBotSnake){
     stwFoods.forEach(f=>{
       if(!f.alive) return;
       if(Math.hypot(stwBotSnake.x-f.x,stwBotSnake.y-f.y)<SEGMENT_SIZE+f.r){
@@ -2996,12 +3102,12 @@ function stwGameLoop(){
         stwBotSnake.setLength(stwBotSnake.length+STW_FOOD_SHRINK);
         stwBotSnake.foodEaten++;
         addParticles(f.x,f.y, '#f44', 16); triggerShake();
-        setTimeout(()=>{ if(stwActive){ stwFoods.push(new STWFood()); }},400);
+        setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
       }
     });
   }
 
-  if(stwMode === 'local' && stwP2Snake && !p2Trapped){
+  if(stwMode === 'local' && stwP2Snake){
     stwFoods.forEach(f=>{
       if(!f.alive) return;
       if(Math.hypot(stwP2Snake.x-f.x,stwP2Snake.y-f.y)<SEGMENT_SIZE+f.r){
@@ -3009,7 +3115,7 @@ function stwGameLoop(){
         stwP2Snake.setLength(stwP2Snake.length+STW_FOOD_SHRINK);
         stwP2Snake.foodEaten++;
         addParticles(f.x,f.y, '#f44', 16); triggerShake();
-        setTimeout(()=>{ if(stwActive){ stwFoods.push(new STWFood()); }},400);
+        setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
       }
     });
   }
@@ -3022,7 +3128,7 @@ function stwGameLoop(){
         rv.setLength(rv.length+STW_RIVAL_SHRINK);
         rv.foodEaten++;
         addParticles(f.x,f.y, '#f44', 16);
-        setTimeout(()=>{ if(stwActive){ stwFoods.push(new STWFood()); }},400);
+        setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
       }
     });
   });
