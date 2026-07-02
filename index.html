@@ -373,8 +373,8 @@ canvas{display:block;position:absolute;top:0;left:0}
       <li>Survive inside the locked chamber with static food until gates reopen!</li>
       <h2>⚔️ MODE 4 — PREDATOR</h2>
       <p>Fight inside a circular arena. Play a Best-of-3 Round System.</p>
-      <li>Hit opponent's body with your head to deal damage (−1 HP) / length decrease</li>
-      <li>Hitting the arena wall slows you briefly</li>
+      <li>Hit opponent's body with your head to deal damage (−1 HP)</li>
+      <li>The arena alternates between Normal (10s) and Danger Phase (15s). During Danger Phase, the boundary glows red and damages any snake that touches it.</li>
       <li>You cannot collide head-to-head — use your body as a weapon</li>
       <h2>🌀 MODE 5 — SHRINK TO WIN</h2>
       <p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p>
@@ -382,6 +382,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <li>Black Holes 🕳️ directly trap you in an orbit and pull you in — wait them out!</li>
       <li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li>
       <li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li>
+      <li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li>
       <li>Hurdles alternate, appearing for a brief duration followed by a wait</li>
       <li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>
     </div>
@@ -477,6 +478,9 @@ let survivalState = 'closed_initial';
 let survivalTimerEnd = 0;
 let survivalChamberFoods = [];
 
+let predDangerPhaseActive = false;
+let predDangerPhaseTimer = 0;
+
 function showScreen(id){
   document.getElementById(currentScreen).classList.add('hidden');
   document.getElementById(id).classList.remove('hidden');
@@ -507,7 +511,10 @@ function pauseGame() {
 
 function resumeGame() {
   const pauseDuration = Date.now() - pauseStartTime;
-  if (gameActive) { gameStartTime += pauseDuration; }
+  if (gameActive) { 
+      gameStartTime += pauseDuration; 
+      predDangerPhaseTimer += pauseDuration;
+  }
   if (trActive) {
     trStartTime += pauseDuration;
     trFoods.forEach(f => f.spawnTime += pauseDuration);
@@ -564,7 +571,7 @@ function showAboutMode() {
   const box = document.getElementById('pause-about-box');
   box.classList.remove('hidden');
   if (gameActive) {
-    box.innerHTML = `<h2>⚔️ MODE 3 — PREDATOR</h2><p>Fight inside a circular arena. Play a Best-of-3 Round System.</p><li>Rounds 1 & 2: 15 HP each. Round 3 (Tiebreaker): 10 HP each.</li><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>Hitting the arena wall slows you briefly</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
+    box.innerHTML = `<h2>⚔️ MODE 3 — PREDATOR</h2><p>Fight inside a circular arena. Play a Best-of-3 Round System.</p><li>Rounds 1 & 2: 15 HP each. Round 3 (Tiebreaker): 10 HP each.</li><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>The arena alternates between Normal (10s) and Danger Phase (15s). During Danger Phase, the boundary glows red and damages any snake that touches it.</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
   } else if (trActive && trVariant === 'classic') {
     box.innerHTML = `<h2>✂️ MODE 1 — CLASSIC TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p><li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li><li>First to reach length 1 wins!</li>`;
   } else if (trActive && trVariant === 'gate') {
@@ -572,7 +579,7 @@ function showAboutMode() {
   } else if (trActive && trVariant === 'survival') {
     box.innerHTML = `<h2>⏳ MODE 3 — SURVIVAL CHAMBERS</h2><p>Tail Removal survival challenge!</p><li>Gates open after 25s.</li><li>Chambers hold only RED food (spread evenly).</li><li>Entering a chamber starts a 12s lockdown timer.</li><li>When closed, you are TRAPPED and main circle food vanishes.</li><li>Survive until gates reopen!</li>`;
   } else if (stwActive) {
-    box.innerHTML = `<h2>` + `🌀 MODE 4 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
+    box.innerHTML = `<h2>` + `🌀 MODE 4 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
   }
 }
 
@@ -646,6 +653,16 @@ const predatorCam = { x: 0, y: 0 };
 
 function renderSnakeBody(ctx, snake) {
   if(!snake.alive) return;
+
+  let origColor = snake.color;
+  let origGlow = snake.glow;
+  let slipoActive = (typeof stwActive !== 'undefined' && stwActive && typeof stwHurdleState !== 'undefined' && stwHurdleState === 'slipo' && (snake instanceof STWSnake || snake instanceof RivalSnake));
+  
+  if (slipoActive) {
+    snake.color = '#e4e8f0'; // Silver metallic color
+    snake.glow = '#ffffff'; // White/silver glow
+  }
+
   const isPink = (snake.color === '#f0a' || snake.color === '#ff3300'); 
   
   ctx.save();
@@ -696,6 +713,7 @@ function renderSnakeBody(ctx, snake) {
     if(snake.color === '#0ff') ringColor = '#88ffff';
     if(snake.color === '#f0a') ringColor = '#ff88ff';
     if(snake.color === '#ff6b35') ringColor = '#ffaa88';
+    if(slipoActive) ringColor = '#ffffff';
 
     ctx.strokeStyle = ringColor; 
     ctx.lineWidth = isPink ? 2.5 : 2; 
@@ -708,6 +726,11 @@ function renderSnakeBody(ctx, snake) {
   }
 
   ctx.restore();
+
+  if (slipoActive) {
+    snake.color = origColor;
+    snake.glow = origGlow;
+  }
 }
 
 class Snake {
@@ -718,6 +741,7 @@ class Snake {
     this.color=cfg.color; this.glow=cfg.glow;
     this.segments=[];
     this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true;
+    this.boundaryHitCooldown = 0;
     this.hits=0; this.dmgDealt=0;
     for(let i=0;i<cfg.length;i++)
       this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE, y:y-Math.sin(angle)*i*SEGMENT_SIZE});
@@ -726,6 +750,7 @@ class Snake {
   update(){
     if(!this.alive) return;
     if(this.hitCooldown>0) this.hitCooldown--;
+    if(this.boundaryHitCooldown>0) this.boundaryHitCooldown--;
     let spd=this.speed;
     if(this.wallSlowTimer>0){ spd*=0.4; this.wallSlowTimer--; }
     let nx=this.x+Math.cos(this.angle)*spd;
@@ -739,6 +764,18 @@ class Snake {
       ny=this.y+Math.sin(this.angle)*spd;
       this.wallSlowTimer=30;
       addParticles(this.x,this.y,this.color,6);
+
+      if (gameActive && predDangerPhaseActive && this.boundaryHitCooldown <= 0) {
+          this.hp--;
+          this.boundaryHitCooldown = 30; // Debounce
+          triggerShake();
+          addParticles(this.x, this.y, '#f00', 30);
+          updateHpBars();
+          if (this.hp <= 0 && !finalSlowMo) {
+              finalSlowMo = true;
+              finalSlowMoFrames = 90;
+          }
+      }
     }
     this.x=nx; this.y=ny;
     this.segments.unshift({x:this.x,y:this.y});
@@ -1000,6 +1037,9 @@ function startPredatorRound() {
     gameActive = true;
     inTransition = false;
     particles = []; finalSlowMo = false; finalSlowMoFrames = 0;
+    predDangerPhaseActive = false;
+    predDangerPhaseTimer = Date.now() + 10000;
+    
     document.getElementById('btn-pause').removeProperty ? document.getElementById('btn-pause').classList.remove('hidden') : document.getElementById('btn-pause').className = "btn";
 
     const isMobile = 'ontouchstart' in window;
@@ -1040,7 +1080,7 @@ function checkHit(attacker,defender){
 
       triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
       if(defender===snake2&&gameMode==='bot') onBotHit();
-      if(defender.hp<=0){ finalSlowMo=true; finalSlowMoFrames=90; }
+      if(defender.hp<=0 && !finalSlowMo){ finalSlowMo=true; finalSlowMoFrames=90; }
       break;
     }
   }
@@ -1049,6 +1089,13 @@ function checkHit(attacker,defender){
 function gameLoop(){
   if(!gameActive) return;
   if(isPaused){ animFrame=requestAnimationFrame(gameLoop); return; }
+  
+  const now = Date.now();
+  if (now >= predDangerPhaseTimer) {
+      predDangerPhaseActive = !predDangerPhaseActive;
+      predDangerPhaseTimer = now + (predDangerPhaseActive ? 15000 : 10000);
+  }
+
   updateShake();
   
   let targetCamX = snake1.x;
@@ -1264,20 +1311,59 @@ function drawArena(){
   }
 
   const grad=ctx.createRadialGradient(CX,CY,r*.7,CX,CY,r);
-  grad.addColorStop(0,'rgba(0,30,60,0)'); grad.addColorStop(1,'rgba(0,80,180,.12)');
+  grad.addColorStop(0,'rgba(0,30,60,0)');
+  if (gameActive && predDangerPhaseActive) {
+      grad.addColorStop(1,'rgba(180,0,30,.2)');
+  } else {
+      grad.addColorStop(1,'rgba(0,80,180,.12)');
+  }
   ctx.beginPath(); ctx.arc(CX,CY,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
   
   ctx.save();
   if (arenaImage.complete && arenaImage.naturalWidth > 0) {
     const imgSize = r * 1.05; 
-    ctx.shadowColor = '#0ff';
-    ctx.shadowBlur = 15;
+    
+    if (gameActive && predDangerPhaseActive) {
+        const t = Date.now() / 150;
+        ctx.shadowColor = '#f00';
+        ctx.shadowBlur = 25 + Math.sin(t) * 10;
+    } else {
+        ctx.shadowColor = '#0ff';
+        ctx.shadowBlur = 15;
+    }
     ctx.drawImage(arenaImage, CX - imgSize, CY - imgSize, imgSize * 2, imgSize * 2);
+
+    if (gameActive && predDangerPhaseActive) {
+        const t2 = Date.now() / 200;
+        
+        ctx.beginPath();
+        ctx.arc(CX, CY, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 0, 50, ${0.7 + Math.sin(t2) * 0.3})`;
+        ctx.lineWidth = 8 + Math.sin(t2 * 2) * 4;
+        ctx.stroke();
+
+        for (let i = 0; i < 12; i++) {
+            let angle = (t2 * 0.5) + (i * (Math.PI * 2 / 12));
+            let sparkR = r + Math.sin(t2 * 3 + i) * 8;
+            ctx.beginPath();
+            ctx.arc(CX + Math.cos(angle) * sparkR, CY + Math.sin(angle) * sparkR, 4, 0, Math.PI*2);
+            ctx.fillStyle = '#fff';
+            ctx.shadowColor = '#f00';
+            ctx.shadowBlur = 10;
+            ctx.fill();
+        }
+    }
   } else {
     ctx.beginPath(); 
     ctx.arc(CX, CY, r, 0, Math.PI*2);
-    ctx.strokeStyle = '#ff0044'; 
-    ctx.lineWidth = 3; 
+    if (gameActive && predDangerPhaseActive) {
+        const t2 = Date.now() / 200;
+        ctx.strokeStyle = `rgba(255, 0, 50, ${0.7 + Math.sin(t2) * 0.3})`;
+        ctx.lineWidth = 6 + Math.sin(t2 * 2) * 4;
+    } else {
+        ctx.strokeStyle = '#ff0044'; 
+        ctx.lineWidth = 3; 
+    }
     ctx.stroke();
     
     ctx.fillStyle = '#ff0044';
@@ -1319,7 +1405,8 @@ function drawArena(){
     const a=t*.4+i*Math.PI*2/3;
     ctx.save(); ctx.globalAlpha=.06+Math.sin(t+i)*.03;
     ctx.beginPath(); ctx.arc(CX+Math.cos(a)*r*.5,CY+Math.sin(a)*r*.5,r*.12,0,Math.PI*2);
-    ctx.fillStyle='#0af'; ctx.fill(); ctx.restore();
+    ctx.fillStyle=(gameActive && predDangerPhaseActive) ? '#f04' : '#0af'; 
+    ctx.fill(); ctx.restore();
   }
 }
 
@@ -2940,6 +3027,20 @@ function stwGameLoop(){
         el.classList.add('hidden');
       }, 2000);
     } else if(stwHurdleState === 'pulito'){
+      stwHurdleState = 'wait_slipo';
+      stwHurdleTimer = now + 10000;
+    } else if(stwHurdleState === 'wait_slipo'){
+      stwHurdleState = 'slipo';
+      stwHurdleTimer = now + 10000;
+      
+      const el = document.getElementById('stw-event-label');
+      el.textContent = '✨ SLIPO ACTIVE!';
+      el.style.color = '#e4e8f0';
+      el.classList.remove('hidden');
+      setTimeout(()=> {
+        el.classList.add('hidden');
+      }, 2000);
+    } else if(stwHurdleState === 'slipo'){
       stwHurdleState = 'wait_gravity';
       stwHurdleTimer = now + 10000;
     }
@@ -2972,6 +3073,52 @@ function stwGameLoop(){
     if(stwP2Snake) p.pull(stwP2Snake);
     if(stwBotSnake) p.pull(stwBotSnake);
   });
+
+  // Handle Slipo food movement
+  if (stwHurdleState === 'slipo') {
+      let activeSnakes = [];
+      if (stwPlayerSnake && stwPlayerSnake.alive) activeSnakes.push(stwPlayerSnake);
+      if (stwP2Snake && stwP2Snake.alive) activeSnakes.push(stwP2Snake);
+      if (stwBotSnake && stwBotSnake.alive) activeSnakes.push(stwBotSnake);
+      stwRivals.forEach(r => { if(r.alive) activeSnakes.push(r); });
+      
+      stwFoods.forEach(f => {
+          if (!f.alive) return;
+          let moveX = 0, moveY = 0;
+          
+          activeSnakes.forEach(s => {
+              const head = s.segments[0] || s;
+              const dx = f.x - head.x;
+              const dy = f.y - head.y;
+              const dist = Math.hypot(dx, dy);
+              
+              if (dist < 160) {
+                  const angleToFood = Math.atan2(dy, dx);
+                  let angleDiff = angleToFood - s.angle;
+                  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                  
+                  if (Math.abs(angleDiff) < Math.PI / 2.2) { 
+                      const speed = (1 - dist / 160) * 5.0; 
+                      moveX += Math.cos(angleToFood) * speed;
+                      moveY += Math.sin(angleToFood) * speed;
+                  }
+              }
+          });
+          
+          if (moveX !== 0 || moveY !== 0) {
+              f.x += moveX;
+              f.y += moveY;
+              const distFromCenter = Math.hypot(f.x - CX, f.y - CY);
+              const maxR = STW_RADIUS * 0.82;
+              if (distFromCenter > maxR) {
+                  const angleFromCenter = Math.atan2(f.y - CY, f.x - CX);
+                  f.x = CX + Math.cos(angleFromCenter) * maxR;
+                  f.y = CY + Math.sin(angleFromCenter) * maxR;
+              }
+          }
+      });
+  }
 
   stwPlayerSnake.update(STW_RADIUS);
   if(stwBotSnake) stwBotSnake.update(STW_RADIUS);
