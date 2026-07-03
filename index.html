@@ -141,6 +141,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="neon-title" style="font-size:clamp(24px,5vw,48px)" id="tr-mode-title">TAIL REMOVAL</div>
     <div class="menu-group">
       <button class="btn" onclick="trVariant='classic'; setupTRScreen(); showScreen('screen-tr-select');">✂️ CLASSIC TAIL REMOVAL</button>
+      <button class="btn" onclick="trVariant='safe'; setupTRScreen(); showScreen('screen-tr-select');">🛡️ SAFE CHAMBERS</button>
       <button class="btn" onclick="trVariant='gate'; setupTRScreen(); showScreen('screen-tr-select');">🚪 GATE ARENA</button>
       <button class="btn" onclick="trVariant='survival'; setupTRScreen(); showScreen('screen-tr-select');">⏳ SURVIVAL CHAMBERS</button>
       <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
@@ -355,28 +356,19 @@ canvas{display:block;position:absolute;top:0;left:0}
   <div id="screen-instructions" class="screen hidden">
     <div class="neon-title" style="font-size:clamp(20px,4vw,36px)">HOW TO PLAY</div>
     <div class="instructions-box">
-      <h2>✂️ MODE 1 — CLASSIC TAIL REMOVAL</h2>
+      <h2>✂️ MODE 1 — TAIL REMOVAL (CLASSIC / GATE / SURVIVAL / SAFE)</h2>
       <p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p>
       <li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li>
       <li>First to reach length 1 wins!</li>
-      <h2>🚪 MODE 2 — GATE ARENA</h2>
-      <p>Tail Removal rules apply, but with expanding chambers!</p>
-      <li>Gates open after 25 seconds allowing access to 4 chambers.</li>
-      <li>Classic Red/Green food will continue to spawn in the main arena!</li>
-      <li>Entering a chamber starts a 12-second lockdown timer.</li>
-      <li>If caught in a chamber or gate when it closes, you are safely teleported to the center.</li>
-      <h2>⏳ MODE 3 — SURVIVAL CHAMBERS</h2>
-      <p>A survival-focused version of Tail Removal.</p>
-      <li>Gates open after 25 seconds. Enter top/bottom chambers holding RED food only!</li>
-      <li>Entering triggers a 12-second lockdown. Gates close and main-circle food vanishes.</li>
-      <li>If you are caught crossing a gate when it closes, you are forced completely into the chamber.</li>
-      <li>Survive inside the locked chamber with static food until gates reopen!</li>
-      <h2>⚔️ MODE 4 — PREDATOR</h2>
+      <li><strong>Safe Chambers:</strong> Survive the Energy Storm every 15s. Find a glowing cyan chamber or rapidly gain length while exposed!</li>
+      <li><strong>Gate Arena:</strong> Expanding chambers open after 25s, locking for 12s on entry.</li>
+      <li><strong>Survival Chambers:</strong> Enter chambers with RED food only, survive until gates reopen!</li>
+      <h2>⚔️ MODE 2 — PREDATOR</h2>
       <p>Fight inside a circular arena. Play a Best-of-3 Round System.</p>
       <li>Hit opponent's body with your head to deal damage (−1 HP)</li>
       <li>The arena alternates between Normal (10s) and Danger Phase (15s). During Danger Phase, the boundary glows red and damages any snake that touches it.</li>
       <li>You cannot collide head-to-head — use your body as a weapon</li>
-      <h2>🌀 MODE 5 — SHRINK TO WIN</h2>
+      <h2>🌀 MODE 3 — SHRINK TO WIN</h2>
       <p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p>
       <li>Gravity Zones 🌀 teleport you instantly — avoid them!</li>
       <li>Black Holes 🕳️ directly trap you in an orbit and pull you in — wait them out!</li>
@@ -414,7 +406,7 @@ const GC = document.getElementById('game');
 const bgCtx = BG.getContext('2d');
 const ctx   = GC.getContext('2d');
 
-let W, H, CX, CY, RADIUS, PREDATOR_RADIUS, TR_RADIUS;
+let W, H, CX, CY, RADIUS, PREDATOR_RADIUS, TR_RADIUS, STW_RADIUS;
 let current_TR_RADIUS = 0;
 
 function resize() {
@@ -425,6 +417,7 @@ function resize() {
   PREDATOR_RADIUS = ((RADIUS * 1.161572) * 1.25) * Math.sqrt(0.85); // Reduced area by 15%
   TR_RADIUS = RADIUS * 1.11803398875;
   current_TR_RADIUS = TR_RADIUS; 
+  STW_RADIUS = Math.min(W,H)*0.88; // Ensure STW_RADIUS is correctly initialized on resize
 }
 resize();
 window.addEventListener('resize',()=>{ resize(); if(gameActive) initPositions(); });
@@ -478,6 +471,10 @@ let survivalState = 'closed_initial';
 let survivalTimerEnd = 0;
 let survivalChamberFoods = [];
 
+let scState = 'idle';
+let scTimerEnd = 0;
+let scChambers = [];
+
 let predDangerPhaseActive = false;
 let predDangerPhaseTimer = 0;
 
@@ -522,10 +519,11 @@ function resumeGame() {
     if (trVariant === 'gate') {
         gateTimerEnd += pauseDuration;
         trChamberFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
-    }
-    if (trVariant === 'survival') {
+    } else if (trVariant === 'survival') {
         survivalTimerEnd += pauseDuration;
         survivalChamberFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
+    } else if (trVariant === 'safe') {
+        scTimerEnd += pauseDuration;
     }
   }
   if (stwActive) {
@@ -571,15 +569,17 @@ function showAboutMode() {
   const box = document.getElementById('pause-about-box');
   box.classList.remove('hidden');
   if (gameActive) {
-    box.innerHTML = `<h2>⚔️ MODE 3 — PREDATOR</h2><p>Fight inside a circular arena. Play a Best-of-3 Round System.</p><li>Rounds 1 & 2: 15 HP each. Round 3 (Tiebreaker): 10 HP each.</li><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>The arena alternates between Normal (10s) and Danger Phase (15s). During Danger Phase, the boundary glows red and damages any snake that touches it.</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
+    box.innerHTML = `<h2>⚔️ MODE 2 — PREDATOR</h2><p>Fight inside a circular arena. Play a Best-of-3 Round System.</p><li>Rounds 1 & 2: 15 HP each. Round 3 (Tiebreaker): 10 HP each.</li><li>Hit opponent's body with your head to deal damage (−1 HP)</li><li>The arena alternates between Normal (10s) and Danger Phase (15s). During Danger Phase, the boundary glows red and damages any snake that touches it.</li><li>You cannot collide head-to-head — use your body as a weapon</li>`;
   } else if (trActive && trVariant === 'classic') {
-    box.innerHTML = `<h2>✂️ MODE 1 — CLASSIC TAIL REMOVAL</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p><li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li><li>First to reach length 1 wins!</li>`;
+    box.innerHTML = `<h2>✂️ MODE 1 — TAIL REMOVAL (CLASSIC)</h2><p>Shrink your tail to just 1 segment before the bot does! Collect red food to shrink (−4 length) and avoid green food which grows you (+5 length).</p><li>Both players can eat any food! Compete for the red food and force the opponent to eat green!</li><li>First to reach length 1 wins!</li>`;
+  } else if (trActive && trVariant === 'safe') {
+    box.innerHTML = `<h2>🛡️ MODE 1 — TAIL REMOVAL (SAFE CHAMBERS)</h2><p>Survive the Energy Storms!</p><li>Every 15 seconds, a 5-second Energy Storm begins.</li><li>Seek shelter in the glowing cyan Safe Chambers on the arena boundary.</li><li>If caught outside, you gain +4 length per second during the storm!</li><li>Only one serpent per chamber! Compete for safety!</li>`;
   } else if (trActive && trVariant === 'gate') {
-    box.innerHTML = `<h2>🚪 MODE 2 — GATE ARENA</h2><p>Tail Removal rules apply, but with expanding chambers!</p><li>Gates open after 25 seconds.</li><li>Find the green food in one of the 4 chambers.</li><li>Entering a chamber starts a 12-second lockdown timer.</li><li>If caught in a chamber or gate when it closes, you are safely teleported to the center.</li>`;
+    box.innerHTML = `<h2>🚪 MODE 1 — TAIL REMOVAL (GATE ARENA)</h2><p>Tail Removal rules apply, but with expanding chambers!</p><li>Gates open after 25 seconds.</li><li>Find the green food in one of the 4 chambers.</li><li>Entering a chamber starts a 12-second lockdown timer.</li><li>If caught in a chamber or gate when it closes, you are safely teleported to the center.</li>`;
   } else if (trActive && trVariant === 'survival') {
-    box.innerHTML = `<h2>⏳ MODE 3 — SURVIVAL CHAMBERS</h2><p>Tail Removal survival challenge!</p><li>Gates open after 25s.</li><li>Chambers hold only RED food (spread evenly).</li><li>Entering a chamber starts a 12s lockdown timer.</li><li>When closed, you are TRAPPED and main circle food vanishes.</li><li>Survive until gates reopen!</li>`;
+    box.innerHTML = `<h2>⏳ MODE 1 — TAIL REMOVAL (SURVIVAL)</h2><p>Tail Removal survival challenge!</p><li>Gates open after 25s.</li><li>Chambers hold only RED food (spread evenly).</li><li>Entering a chamber starts a 12s lockdown timer.</li><li>When closed, you are TRAPPED and main circle food vanishes.</li><li>Survive until gates reopen!</li>`;
   } else if (stwActive) {
-    box.innerHTML = `<h2>` + `🌀 MODE 4 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
+    box.innerHTML = `<h2>` + `🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
   }
 }
 
@@ -1071,12 +1071,19 @@ function checkHit(attacker,defender){
       defender.hp--; attacker.hits++; attacker.dmgDealt++;
       attacker.hitCooldown=40; defender.hitCooldown=20;
       
-      attacker.x -= Math.cos(attacker.angle) * 20; 
-      attacker.y -= Math.sin(attacker.angle) * 20;
+      const dx = head.x - s.x;
+      const dy = head.y - s.y;
+      const bounceAngle = Math.atan2(dy, dx);
+      
+      attacker.angle = bounceAngle;
+      const knockback = 45;
+      attacker.x += Math.cos(bounceAngle) * knockback; 
+      attacker.y += Math.sin(bounceAngle) * knockback;
       if(attacker.segments[0]) {
         attacker.segments[0].x = attacker.x;
         attacker.segments[0].y = attacker.y;
       }
+      attacker.wallSlowTimer = 20; 
 
       triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
       if(defender===snake2&&gameMode==='bot') onBotHit();
@@ -1400,6 +1407,54 @@ function drawArena(){
     ctx.restore();
   }
 
+  // Draw Safe Chambers and Storm Visuals
+  if (trActive && trVariant === 'safe') {
+      const t = Date.now() / 200;
+      if (scState === 'storm') {
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 20, 50, 0.4)';
+          ctx.fillRect(-W, -H, W*2, H*2); // cover whole visible area based on cam
+          // Storm edge
+          ctx.beginPath(); ctx.arc(CX, CY, current_TR_RADIUS, 0, Math.PI*2);
+          ctx.strokeStyle = `rgba(50, 150, 255, ${0.4 + Math.sin(t)*0.2})`;
+          ctx.lineWidth = 15;
+          ctx.stroke();
+
+          // Occasional lightning flash
+          if (Math.random() < 0.05) {
+              ctx.fillStyle = 'rgba(100, 200, 255, 0.1)';
+              ctx.beginPath(); ctx.arc(CX, CY, current_TR_RADIUS, 0, Math.PI*2); ctx.fill();
+          }
+
+          if (Math.random() < 0.3) {
+              let a = Math.random() * Math.PI * 2;
+              let ptR = Math.random() * current_TR_RADIUS;
+              addParticles(CX + Math.cos(a)*ptR, CY + Math.sin(a)*ptR, '#0af', 2);
+          }
+          ctx.restore();
+      }
+
+      scChambers.forEach(c => {
+          ctx.save();
+          let pulse = Math.sin(t + c.angle) * 5;
+          ctx.beginPath(); ctx.arc(c.x, c.y, c.r + pulse, 0, Math.PI*2);
+          ctx.fillStyle = 'rgba(0, 150, 255, 0.2)';
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#0ff';
+          ctx.shadowColor = '#0ff';
+          ctx.shadowBlur = 15;
+          ctx.stroke();
+
+          if (c.occupiedBy) {
+              ctx.fillStyle = c.occupiedBy.color;
+              ctx.globalAlpha = 0.3;
+              ctx.fill();
+          }
+          ctx.restore();
+      });
+  }
+
   const t=Date.now()/1000;
   for(let i=0;i<3;i++){
     const a=t*.4+i*Math.PI*2/3;
@@ -1490,9 +1545,6 @@ function getSurvivalArenaPush(nx, ny, rad, snake) {
   return { push: true, cx: closest.x, cy: closest.y };
 }
 
-// =========================================================
-// MODE 1, 2, & 3 — TAIL REMOVAL, GATE ARENA, SURVIVAL
-// =========================================================
 const TR_INIT_LENGTH=50;
 const TR_FOOD_LIFETIME=2000;
 const TR_FOOD_AHEAD_DIST=80;
@@ -1514,6 +1566,7 @@ class TRSnake {
     this.color=isBot?'#f0a':'#0ff'; this.glow=isBot?'#f04':'#0af';
     this.length=TR_INIT_LENGTH; this.segments=[];
     this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true; this.foodEaten=0;
+    this.lastGrowthTime=0;
     for(let i=0;i<TR_INIT_LENGTH;i++)
       this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
@@ -1553,7 +1606,20 @@ class TRSnake {
           ny = this.y + Math.sin(this.angle)*spd;
           this.wallSlowTimer = 25;
       }
-    } else {
+    } else if (trVariant === 'safe' || trVariant === 'classic') {
+      if (trVariant === 'safe') {
+          scChambers.forEach(c => {
+              if (c.occupiedBy && c.occupiedBy !== this) {
+                  let d = Math.hypot(nx - c.x, ny - c.y);
+                  if (d < c.r + SEGMENT_SIZE) {
+                      let pushAngle = Math.atan2(ny - c.y, nx - c.x);
+                      this.angle = pushAngle + (Math.random() - 0.5) * 0.4;
+                      nx = this.x + Math.cos(this.angle) * spd;
+                      ny = this.y + Math.sin(this.angle) * spd;
+                  }
+              }
+          });
+      }
       const dist=Math.hypot(nx-CX,ny-CY);
       if(dist>current_TR_RADIUS*0.89 - SEGMENT_SIZE){
         const pushAngle=Math.atan2(CY-ny,CX-nx);
@@ -1591,7 +1657,7 @@ class TRFood {
 let trP1Type = 'small', trP2Type = 'big';
 
 function setupTRScreen(){
-  document.getElementById('tr-select-title').textContent = trVariant === 'gate' ? "GATE ARENA" : (trVariant === 'survival' ? "SURVIVAL CHAMBERS" : "CLASSIC TAIL REMOVAL");
+  document.getElementById('tr-select-title').textContent = trVariant === 'gate' ? "GATE ARENA" : (trVariant === 'survival' ? "SURVIVAL CHAMBERS" : (trVariant === 'safe' ? "SAFE CHAMBERS" : "CLASSIC TAIL REMOVAL"));
   document.getElementById('tr-select-type').classList.remove('hidden');
   document.getElementById('tr-select-details').classList.add('hidden');
   trP1Type=null;
@@ -1697,7 +1763,6 @@ function startTailRemoval(){
       let survivalFoodCount = 9; // 10% reduction from 10
       for(let i=0; i<2; i++) {
           for(let j=0; j<survivalFoodCount; j++) {
-              // Ensure spread evenly around the circle by taking angular slices
               let baseAngle = (Math.PI * 2 / survivalFoodCount) * j;
               let a = baseAngle + (Math.random() * 0.4 - 0.2); 
               let fr = 10 + Math.random() * (rc - 25);
@@ -1714,6 +1779,11 @@ function startTailRemoval(){
       
       survivalState = 'closed_initial';
       survivalTimerEnd = Date.now() + 25000;
+  } else if (trVariant === 'safe') {
+      scState = 'idle';
+      scTimerEnd = Date.now() + 12000;
+      scChambers = [];
+      spawnTRFood(trSnake1,'p1'); spawnTRFood(trSnake2,'p2');
   } else {
       spawnTRFood(trSnake1,'p1'); spawnTRFood(trSnake2,'p2');
   }
@@ -1742,8 +1812,21 @@ function spawnTRFood(snake,owner){
   const f=new TRFood(fx,fy,foodType); f.owner=owner; trFoods.push(f);
 }
 
-// Collisions disabled to allow smooth crossing in TR Mode
-// function trCheckHit(attacker, defender) { ... }
+function checkChamberEntry() {
+    if (scState !== 'warning' && scState !== 'storm') return;
+    [trSnake1, trSnake2].forEach(s => {
+        let sHead = s.segments[0];
+        scChambers.forEach(c => {
+            let d = Math.hypot(sHead.x - c.x, sHead.y - c.y);
+            if (d < c.r) {
+                if (!c.occupiedBy) {
+                    let alreadyIn = scChambers.some(oc => oc.occupiedBy === s);
+                    if(!alreadyIn) c.occupiedBy = s;
+                }
+            }
+        });
+    });
+}
 
 function trGameLoop(){
   if(!trActive) return;
@@ -1898,6 +1981,63 @@ function trGameLoop(){
               spawnTRFood(trSnake2, 'p2');
           }
       }
+  } else if (trVariant === 'safe') {
+      if (scState === 'idle') {
+          if (now >= scTimerEnd) {
+              scState = 'warning';
+              scTimerEnd = now + 3000;
+              let numChambers = Math.random() < 0.5 ? 1 : 2;
+              scChambers = [];
+              let angle1 = Math.random() * Math.PI * 2;
+              let r = current_TR_RADIUS * 0.89 - 50; 
+              scChambers.push({x: CX + Math.cos(angle1)*r, y: CY + Math.sin(angle1)*r, r: 50, occupiedBy: null, angle: angle1});
+              if (numChambers === 2) {
+                  let angle2 = angle1 + Math.PI + (Math.random() - 0.5) * 1.5;
+                  scChambers.push({x: CX + Math.cos(angle2)*r, y: CY + Math.sin(angle2)*r, r: 50, occupiedBy: null, angle: angle2});
+              }
+          }
+      } else if (scState === 'warning') {
+          checkChamberEntry();
+          if (now >= scTimerEnd) {
+              scState = 'storm';
+              scTimerEnd = now + 5000;
+              triggerShake();
+          }
+      } else if (scState === 'storm') {
+          checkChamberEntry();
+          [trSnake1, trSnake2].forEach(s => {
+              let inChamber = scChambers.some(c => c.occupiedBy === s);
+              if (!inChamber) {
+                  if (!s.lastGrowthTime) s.lastGrowthTime = now;
+                  if (now - s.lastGrowthTime > 250) { 
+                      s.setLength(s.length + 1);
+                      s.lastGrowthTime = now;
+                  }
+              }
+          });
+
+          if (now >= scTimerEnd) {
+              scState = 'idle';
+              scTimerEnd = now + 12000; 
+              scChambers.forEach(c => {
+                  if (c.occupiedBy) {
+                      let s = c.occupiedBy;
+                      let safeR = current_TR_RADIUS * 0.5;
+                      let a = Math.random() * Math.PI * 2;
+                      s.x = CX + Math.cos(a) * safeR;
+                      s.y = CY + Math.sin(a) * safeR;
+                      s.angle = Math.random() * Math.PI * 2;
+                      for(let i=0; i<s.segments.length; i++) {
+                          s.segments[i] = { x: s.x - Math.cos(s.angle)*i*SEGMENT_SIZE, y: s.y - Math.sin(s.angle)*i*SEGMENT_SIZE };
+                      }
+                      addParticles(s.x, s.y, s.color, 30);
+                      triggerShake();
+                  }
+              });
+              scChambers = [];
+              [trSnake1, trSnake2].forEach(s => s.lastGrowthTime = 0);
+          }
+      }
   }
 
   trCam.x += (trSnake1.x - trCam.x) * TR_CAM_LERP;
@@ -1915,12 +2055,6 @@ function trGameLoop(){
   if(trGameMode==='bot') trBotThink(now);
   
   trSnake1.update(); trSnake2.update();
-
-  // Disabled collisions for TR Mode to cross smoothly
-  // trCheckHit(trSnake1, trSnake2);
-  // trCheckHit(trSnake2, trSnake1);
-  // enforceSolidBodies(trSnake1, trSnake2, 0.7);
-  // enforceSolidBodies(trSnake2, trSnake1, 0.7);
 
   trCheckFoodCollision(now); trManageFoods(now);
   updateParticles(); trSnake1.draw(); trSnake2.draw();
@@ -1988,6 +2122,23 @@ function trGameLoop(){
           ctx.fillText(`GATES OPEN - CHAMBERS ACTIVE`, CX, CY - current_TR_RADIUS + 80);
       }
       ctx.restore();
+  } else if (trVariant === 'safe') {
+      ctx.save();
+      ctx.font = 'bold 20px Segoe UI';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      let remain = Math.max(0, Math.ceil((scTimerEnd - Date.now()) / 1000));
+      if (scState === 'idle') {
+          ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
+          ctx.fillText(`STORM IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
+      } else if (scState === 'warning') {
+          ctx.fillStyle = '#fa0'; ctx.shadowColor = '#f80'; ctx.shadowBlur = 10;
+          ctx.fillText(`STORM APPROACHING: ${remain}`, CX, CY - current_TR_RADIUS + 80);
+      } else if (scState === 'storm') {
+          ctx.fillStyle = '#f04'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
+          ctx.fillText(`ENERGY STORM: ${remain}`, CX, CY - current_TR_RADIUS + 80);
+      }
+      ctx.restore();
   }
   
   ctx.restore(); 
@@ -2046,6 +2197,29 @@ function trBotThink(now){
   const dc=TR_DIFF[trDiff]; trBot.actionFrame++;
   const head=trSnake2.segments[0];
   const wallDist=current_TR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
+  
+  if (trVariant === 'safe' && (scState === 'warning' || scState === 'storm')) {
+      let myChamber = scChambers.find(c => c.occupiedBy === trSnake2);
+      if (myChamber) {
+          let d = Math.hypot(head.x - myChamber.x, head.y - myChamber.y);
+          if (d > 20) {
+              const ca=Math.atan2(myChamber.y-head.y,myChamber.x-head.x);
+              let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+              trSnake2.turn(Math.sign(da)*1.0);
+          } else {
+              trSnake2.turn(1.0); 
+          }
+          return;
+      } else {
+          let vacant = scChambers.find(c => !c.occupiedBy);
+          if (vacant) {
+              const ca=Math.atan2(vacant.y-head.y,vacant.x-head.x);
+              let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+              trSnake2.turn(Math.sign(da)*1.0);
+              return;
+          }
+      }
+  }
   
   let botFood=null, nd=Infinity;
   let botFoods = [...trFoods];
@@ -2107,7 +2281,7 @@ function trBotThink(now){
 
 function trBotExecuteMove(botFood,wallDist,dc){
   const head=trSnake2.segments[0];
-  if(trVariant === 'classic' && wallDist<current_TR_RADIUS*0.18){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; trSnake2.turn(Math.sign(da)*1.0); return; }
+  if((trVariant === 'classic' || trVariant === 'safe') && wallDist<current_TR_RADIUS*0.18){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; trSnake2.turn(Math.sign(da)*1.0); return; }
   
   if(trBot.targetFood&&trBot.targetFood.alive){
     const distToFood = Math.hypot(trBot.targetFood.x - head.x, trBot.targetFood.y - head.y);
@@ -2154,7 +2328,7 @@ function trCheckFoodCollision(now){
       eater.setLength(eater.length+delta); eater.foodEaten++;
       addParticles(f.x,f.y,f.type==='red'?'#f44':'#4f4',16); triggerShake();
       
-      setTimeout(()=>{ if(trActive && survivalState !== 'closed_trapped') spawnTRFood(f.owner==='p1'?trSnake1:trSnake2, f.owner); }, trVariant === 'classic' ? 300 : 1500);
+      setTimeout(()=>{ if(trActive && survivalState !== 'closed_trapped') spawnTRFood(f.owner==='p1'?trSnake1:trSnake2, f.owner); }, trVariant === 'classic' || trVariant === 'safe' ? 300 : 1500);
     }
   });
 
@@ -2262,7 +2436,7 @@ function endTRGame(){
 }
 
 // =========================================================
-// MODE 4/5 — SHRINK TO WIN
+// MODE 3 — SHRINK TO WIN
 // =========================================================
 const STW_INIT_LENGTH = 40; 
 const STW_PLAYER_INIT_LENGTH = 120; 
@@ -2276,8 +2450,6 @@ const STW_TELEPORT_COOLDOWN = 2000;
 const STW_BLACKHOLE_DURATION = 5000;
 const STW_HUNTER_DURATION = 5000;
 const STW_HUNTER_PENALTY = 10;
-
-let STW_RADIUS;
 
 const stwCam = { x: 0, y: 0 };
 const STW_CAM_LERP = 0.08;
@@ -2352,7 +2524,7 @@ class STWFood {
     let tries=0;
     do{
       const angle=Math.random()*Math.PI*2;
-      const r=30+Math.random()*(STW_RADIUS*0.82);
+      const r=30+Math.random()*(STW_RADIUS*0.75); // Fixed spawn radius
       this.x=CX+Math.cos(angle)*r; this.y=CY+Math.sin(angle)*r; tries++;
     } while(tries<20&&isInsideGravityZone(this.x,this.y));
     this.alive=true;
@@ -2736,7 +2908,8 @@ function enforceOrbit(snake, bh) {
 }
 
 function startShrinkToWin(mode){
-  STW_RADIUS = Math.min(W,H)*0.88;
+  // Global variable initialized correctly regardless of window resizing
+  STW_RADIUS = Math.min(W,H)*0.88; 
   stwMode=mode; stwActive=true;
 
   stwFoods=[]; stwGravityZones=[]; stwBlackHoles=[]; stwRivals=[]; stwHunters=[]; stwPulitos=[]; particles=[];
@@ -2902,9 +3075,6 @@ function stwBotChaseFood(){
   
   stwBotSnake.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(maxTurn,Math.abs(da)*1.6));
 }
-
-// Collisions disabled to allow smooth crossing in STW Mode
-// function stwCheckHit(attacker, defender) { ... }
 
 function stwGameLoop(){
   if(!stwActive) return;
@@ -3074,7 +3244,6 @@ function stwGameLoop(){
     if(stwBotSnake) p.pull(stwBotSnake);
   });
 
-  // Handle Slipo food movement
   if (stwHurdleState === 'slipo') {
       let activeSnakes = [];
       if (stwPlayerSnake && stwPlayerSnake.alive) activeSnakes.push(stwPlayerSnake);
@@ -3125,12 +3294,10 @@ function stwGameLoop(){
   if(stwP2Snake) stwP2Snake.update(STW_RADIUS);
   stwRivals.forEach(r=>{ r.think(); r.update(STW_RADIUS); });
   
-  // Handle Pulito food suction
   stwPulitos.forEach(p => {
     if (!p.alive) return;
     let age = Date.now() - p.spawnTime;
     if (age < 5000) {
-      // Phase 1: Pull food
       stwFoods.forEach(f => {
         if (!f.alive) return;
         let dx = p.x - f.x;
@@ -3140,7 +3307,7 @@ function stwGameLoop(){
           f.alive = false;
         } else {
           let a = Math.atan2(dy, dx);
-          a += 0.5; // slight spiral
+          a += 0.5; 
           let speed = 1.5 + (1 - Math.min(dist, STW_RADIUS)/STW_RADIUS) * 15;
           f.x += Math.cos(a) * speed;
           f.y += Math.sin(a) * speed;
@@ -3148,14 +3315,13 @@ function stwGameLoop(){
         }
       });
     } else {
-      // Phase 2: Destroy remaining food
       stwFoods.forEach(f => f.alive = false);
     }
   });
 
   if (stwPulitos.some(p => p.alive)) {
       ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // Override camera translation to fully cover the screen
+      ctx.setTransform(1, 0, 0, 1, 0, 0); 
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
@@ -3164,26 +3330,6 @@ function stwGameLoop(){
           shakeY = (Math.random() - 0.5) * 4;
       }
   }
-  
-  // Disabled collisions for STW Mode to cross smoothly
-  // if (stwMode === 'bot' && stwBotSnake) {
-  //     stwCheckHit(stwPlayerSnake, stwBotSnake);
-  //     stwCheckHit(stwBotSnake, stwPlayerSnake);
-  //     enforceSolidBodies(stwPlayerSnake, stwBotSnake, 0.7);
-  //     enforceSolidBodies(stwBotSnake, stwPlayerSnake, 0.7);
-  // }
-  // if (stwMode === 'local' && stwP2Snake) {
-  //     stwCheckHit(stwPlayerSnake, stwP2Snake);
-  //     stwCheckHit(stwP2Snake, stwPlayerSnake);
-  //     enforceSolidBodies(stwPlayerSnake, stwP2Snake, 0.7);
-  //     enforceSolidBodies(stwP2Snake, stwPlayerSnake, 0.7);
-  // }
-  // stwRivals.forEach(r => {
-  //     stwCheckHit(stwPlayerSnake, r);
-  //     stwCheckHit(r, stwPlayerSnake);
-  //     enforceSolidBodies(stwPlayerSnake, r, 0.7);
-  //     enforceSolidBodies(r, stwPlayerSnake, 0.7);
-  // });
   
   stwHunters.forEach(h => {
     h.update();
