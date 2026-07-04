@@ -350,7 +350,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <li>First to reach length 1 wins!</li>
       <li><strong>Safe Chambers:</strong> Survive the Energy Storm every 15s. Find a glowing cyan chamber outside the arena or rapidly gain length while exposed! Only one snake per chamber.</li>
       <li><strong>Gate Arena:</strong> Expanding chambers open after 25s, locking for 12s on entry.</li>
-      <li><strong>Survival Chambers:</strong> Enter chambers with RED food only, survive until gates reopen!</li>
+      <li><strong>Survival Chambers:</strong> Every 15s, one random gate opens for 7s. First to enter gets safety in the outside chamber. If both snakes stay inside, TWO futuristic cannons emerge to blast them for 10s (+4 length per hit).</li>
       <h2>⚔️ MODE 2 — PREDATOR</h2>
       <p>Fight inside a circular arena. Play a Best-of-3 Round System.</p>
       <li>Hit opponent's body with your head to deal damage (−1 HP)</li>
@@ -393,6 +393,7 @@ const bgCtx = BG.getContext('2d');
 const ctx   = GC.getContext('2d');
 let W, H, CX, CY, RADIUS, PREDATOR_RADIUS, TR_RADIUS, STW_RADIUS;
 let current_TR_RADIUS = 0;
+
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
   BG.width = GC.width = W; BG.height = GC.height = H;
@@ -405,12 +406,14 @@ function resize() {
 }
 resize();
 window.addEventListener('resize',()=>{ resize(); if(gameActive) initPositions(); });
+
 const settings = { particles:true, shake:true };
 function toggleSetting(k){
   settings[k]=!settings[k];
   document.getElementById('toggle-'+k).textContent=settings[k]?'ON':'OFF';
   document.getElementById('toggle-'+k).classList.toggle('active',settings[k]);
 }
+
 const GAME_SCREENS = new Set(['screen-game','screen-tr-game','screen-stw-game']);
 const mainTheme = document.getElementById('main-music');
 function startMenuMusic() {
@@ -424,48 +427,47 @@ function stopMenuMusic() {
   mainTheme.pause();
   mainTheme.currentTime = 0;
 }
-window.addEventListener('load', () => {
-    startMenuMusic();
-});
+window.addEventListener('load', () => startMenuMusic());
 document.addEventListener('click', startMenuMusic);
 document.addEventListener('keydown', startMenuMusic);
 document.addEventListener('touchstart', startMenuMusic, {passive: true});
+
 let currentScreen = 'screen-menu';
-let isPaused = false;
-let pauseStartTime = 0;
+let isPaused = false, pauseStartTime = 0;
 let trVariant = 'classic';
-let gateState = 'closed';
-let gateTimerEnd = 0;
-let gateChambers = [];
-let trChamberFoods = [];
+
+let gateState = 'closed', gateTimerEnd = 0, gateChambers = [], trChamberFoods = [];
 const GATE_WIDTH = 100;
+
+// SURVIVAL CHAMBERS VARIABLES
 let survivalChambers = [];
-let survivalState = 'closed_initial';
+let survivalState = 'normal'; // 'normal', 'gate_open', 'cannon'
 let survivalTimerEnd = 0;
-let survivalChamberFoods = [];
-let scState = 'idle';
-let scTimerEnd = 0;
-let scChambers = [];
-let predDangerPhaseActive = false;
-let predDangerPhaseTimer = 0;
+let survivalActiveGate = -1;
+let survivalOutsideSnake = null;
+let survivalInsideSnake = null;
+let survivalCannons = [];
+let survivalProjectiles = [];
+
+let scState = 'idle', scTimerEnd = 0, scChambers = [];
+let predDangerPhaseActive = false, predDangerPhaseTimer = 0;
+
 function showScreen(id){
   document.getElementById(currentScreen).classList.add('hidden');
   document.getElementById(id).classList.remove('hidden');
   currentScreen = id;
   if(!GAME_SCREENS.has(id)){
-    gameActive  = false;
-    trActive    = false;
-    stwActive   = false;
-    isPaused    = false;
+    gameActive = trActive = stwActive = isPaused = false;
     document.getElementById('btn-pause').classList.add('hidden');
-    if(animFrame)    { cancelAnimationFrame(animFrame);    animFrame    = null; }
-    if(trAnimFrame)  { cancelAnimationFrame(trAnimFrame);  trAnimFrame  = null; }
+    if(animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+    if(trAnimFrame) { cancelAnimationFrame(trAnimFrame); trAnimFrame = null; }
     if(stwAnimFrame) { cancelAnimationFrame(stwAnimFrame); stwAnimFrame = null; }
     ctx.clearRect(0, 0, W, H);
     particles = [];
     startMenuMusic();
   }
 }
+
 function pauseGame() {
   isPaused = true;
   pauseStartTime = Date.now();
@@ -473,6 +475,7 @@ function pauseGame() {
   document.getElementById('pause-about-box').classList.add('hidden');
   document.getElementById('btn-pause').classList.add('hidden');
 }
+
 function resumeGame() {
   const pauseDuration = Date.now() - pauseStartTime;
   if (gameActive) { 
@@ -488,7 +491,7 @@ function resumeGame() {
         trChamberFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
     } else if (trVariant === 'survival') {
         survivalTimerEnd += pauseDuration;
-        survivalChamberFoods.forEach(f => { if(f.spawnTime) f.spawnTime += pauseDuration; });
+        if(survivalCannons) survivalCannons.forEach(c => c.lastFire += pauseDuration);
     } else if (trVariant === 'safe') {
         scTimerEnd += pauseDuration;
     }
@@ -510,25 +513,23 @@ function resumeGame() {
   document.getElementById('screen-pause').classList.add('hidden');
   if(!inTransition) document.getElementById('btn-pause').classList.remove('hidden');
 }
+
 function restartCurrentGame() {
   isPaused = false;
   document.getElementById('screen-pause').classList.add('hidden');
   document.getElementById('pause-about-box').classList.add('hidden');
-  if (gameActive) {
-    restartGame();
-  } else if (trActive) {
-    startTailRemoval();
-  } else if (stwActive) {
-    showScreen('screen-stw-game');
-    startShrinkToWin(stwMode);
-  }
+  if (gameActive) restartGame();
+  else if (trActive) startTailRemoval();
+  else if (stwActive) { showScreen('screen-stw-game'); startShrinkToWin(stwMode); }
 }
+
 function exitToMenu() {
   isPaused = false;
   document.getElementById('screen-pause').classList.add('hidden');
   document.getElementById('btn-pause').classList.add('hidden');
   showScreen('screen-menu');
 }
+
 function showAboutMode() {
   const box = document.getElementById('pause-about-box');
   box.classList.remove('hidden');
@@ -541,17 +542,16 @@ function showAboutMode() {
   } else if (trActive && trVariant === 'gate') {
     box.innerHTML = `<h2>🚪 MODE 1 — TAIL REMOVAL (GATE ARENA)</h2><p>Tail Removal rules apply, but with expanding chambers!</p><li>Gates open after 25 seconds.</li><li>Find the green food in one of the 4 chambers.</li><li>Entering a chamber starts a 12-second lockdown timer.</li><li>If caught in a chamber or gate when it closes, you are safely teleported to the center.</li>`;
   } else if (trActive && trVariant === 'survival') {
-    box.innerHTML = `<h2>⏳ MODE 1 — TAIL REMOVAL (SURVIVAL)</h2><p>Tail Removal survival challenge!</p><li>Gates open after 25s.</li><li>Chambers hold only RED food (spread evenly).</li><li>Entering a chamber starts a 12s lockdown timer.</li><li>When closed, you are TRAPPED and main circle food vanishes.</li><li>Survive until gates reopen!</li>`;
+    box.innerHTML = `<h2>⏳ MODE 1 — TAIL REMOVAL (SURVIVAL)</h2><p>Every 15s, one random gate opens for 7s.</p><li>First to enter gains safety inside the outer chamber.</li><li>If both snakes stay inside, TWO futuristic cannons emerge to blast them for 10s (+4 length per hit).</li><li>Classic Tail Removal continues during the attack!</li>`;
   } else if (stwActive) {
     box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
   }
 }
+
 function enforceSolidBodies(sA, sB, solidRatio) {
   if(!sA || !sA.alive || !sB || !sB.alive) return;
   if (Math.abs(sA.x - sB.x) > sB.segments.length * SEGMENT_SIZE + 50 ||
-      Math.abs(sA.y - sB.y) > sB.segments.length * SEGMENT_SIZE + 50) {
-      return;
-  }
+      Math.abs(sA.y - sB.y) > sB.segments.length * SEGMENT_SIZE + 50) return;
   let limitB = Math.floor(sB.segments.length * solidRatio);
   for (let i = 0; i < limitB; i += 2) {
     let s = sB.segments[i];
@@ -565,15 +565,14 @@ function enforceSolidBodies(sA, sB, solidRatio) {
       let ny = (sA.y - s.y) / dist;
       let pushX = nx * overlap * 1.5;
       let pushY = ny * overlap * 1.5;
-      sA.x += pushX;
-      sA.y += pushY;
+      sA.x += pushX; sA.y += pushY;
       for(let j=0; j<sA.segments.length; j++) {
-          sA.segments[j].x += pushX;
-          sA.segments[j].y += pushY;
+          sA.segments[j].x += pushX; sA.segments[j].y += pushY;
       }
     }
   }
 }
+
 let gameMode='bot', botDiff='easy';
 let p1Snake=null, p2Snake=null, selectionStep=0;
 function setupMode(m){
@@ -585,8 +584,7 @@ function setupMode(m){
   document.getElementById('select-instruction').textContent=m==='bot'?'Choose your snake:':'Select a serpent:';
 }
 function selectSnake(t){
-  p1Snake = t;
-  p2Snake = t === 'small' ? 'big' : 'small';
+  p1Snake = t; p2Snake = t === 'small' ? 'big' : 'small';
   document.getElementById('card-small').classList.toggle('selected', t === 'small');
   document.getElementById('card-big').classList.toggle('selected', t === 'big');
   document.getElementById('btn-start-game').classList.remove('hidden');
@@ -596,76 +594,57 @@ function setDiff(d,btn){
   document.querySelectorAll('#screen-snake-select .diff-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
 }
+
 const SEGMENT_SIZE=8;
 const SNAKE_CONFIGS={
   small:{ length:54, speed:4.3, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
   big:  { length:54, speed:4.3, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 const predatorCam = { x: 0, y: 0 };
+
 function renderSnakeBody(ctx, snake) {
   if(!snake.alive) return;
-  let origColor = snake.color;
-  let origGlow = snake.glow;
+  let origColor = snake.color, origGlow = snake.glow;
   let slipoActive = (typeof stwActive !== 'undefined' && stwActive && typeof stwHurdleState !== 'undefined' && stwHurdleState === 'slipo' && (snake instanceof STWSnake || snake instanceof RivalSnake));
-  if (slipoActive) {
-    snake.color = '#e4e8f0';
-    snake.glow = '#ffffff';
-  }
+  if (slipoActive) { snake.color = '#e4e8f0'; snake.glow = '#ffffff'; }
   const isPink = (snake.color === '#f0a' || snake.color === '#ff3300'); 
-  ctx.save();
-  ctx.shadowBlur = 0;
+  ctx.save(); ctx.shadowBlur = 0;
   for(let i = snake.segments.length - 1; i >= 0; i--) {
     const s = snake.segments[i];
     const taper = Math.max(0.25, 1 - (i / snake.segments.length) * 0.75);
     const r = SEGMENT_SIZE * 1.1 * taper;
     ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI*2);
-    ctx.fillStyle = snake.color;
-    ctx.fill();
+    ctx.fillStyle = snake.color; ctx.fill();
     ctx.beginPath(); ctx.arc(s.x, s.y, r * (isPink ? 0.3 : 0.45), 0, Math.PI*2); 
-    ctx.fillStyle = '#ffffff'; 
-    ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.fill();
   }
   if (snake.segments.length > 0) {
-    const headX = snake.x;
-    const headY = snake.y;
-    const headR = SEGMENT_SIZE * 1.6;
-    ctx.shadowColor = snake.glow; 
-    ctx.shadowBlur = isPink ? 25 : 15;
+    const headX = snake.x, headY = snake.y, headR = SEGMENT_SIZE * 1.6;
+    ctx.shadowColor = snake.glow; ctx.shadowBlur = isPink ? 25 : 15;
     ctx.beginPath(); ctx.arc(headX, headY, headR, 0, Math.PI*2);
-    ctx.fillStyle = snake.color; 
-    ctx.fill();
+    ctx.fillStyle = snake.color; ctx.fill();
     const eyeX = headX + Math.cos(snake.angle) * (headR * 0.3);
     const eyeY = headY + Math.sin(snake.angle) * (headR * 0.3);
     ctx.beginPath(); ctx.arc(eyeX, eyeY, headR * (isPink ? 0.35 : 0.45), 0, Math.PI*2);
-    ctx.fillStyle = '#ffffff'; 
-    ctx.shadowColor = '#ffffff'; 
-    ctx.shadowBlur = isPink ? 15 : 8; 
-    ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = isPink ? 15 : 8; ctx.fill();
     ctx.beginPath();
-    if(ctx.ellipse) {
-      ctx.ellipse(headX, headY, headR * 1.6, headR * (isPink ? 0.4 : 0.6), snake.angle + (isPink ? 0.15 : 0), 0, Math.PI*2);
-    } else {
-      ctx.arc(headX, headY, headR * 1.2, 0, Math.PI*2);
-    }
+    if(ctx.ellipse) ctx.ellipse(headX, headY, headR * 1.6, headR * (isPink ? 0.4 : 0.6), snake.angle + (isPink ? 0.15 : 0), 0, Math.PI*2);
+    else ctx.arc(headX, headY, headR * 1.2, 0, Math.PI*2);
     let ringColor = '#ffffff';
     if(snake.color === '#0ff') ringColor = '#88ffff';
     if(snake.color === '#f0a') ringColor = '#ff88ff';
     if(snake.color === '#ff6b35') ringColor = '#ffaa88';
     if(slipoActive) ringColor = '#ffffff';
-    ctx.strokeStyle = ringColor; 
-    ctx.lineWidth = isPink ? 2.5 : 2; 
-    ctx.stroke();
+    ctx.strokeStyle = ringColor; ctx.lineWidth = isPink ? 2.5 : 2; ctx.stroke();
   }
   if(snake.hitCooldown > 0 && snake.hitCooldown % 4 < 2){
     ctx.beginPath(); ctx.arc(snake.x, snake.y, SEGMENT_SIZE * 2.5, 0, Math.PI*2);
     ctx.strokeStyle = snake.glow; ctx.lineWidth = 2; ctx.globalAlpha = .5; ctx.stroke();
   }
   ctx.restore();
-  if (slipoActive) {
-    snake.color = origColor;
-    snake.glow = origGlow;
-  }
+  if (slipoActive) { snake.color = origColor; snake.glow = origGlow; }
 }
+
 class Snake {
   constructor(cfg,x,y,angle,isP2){
     this.cfg=cfg; this.x=x; this.y=y; this.angle=angle; this.isP2=isP2;
@@ -676,8 +655,7 @@ class Snake {
     this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true;
     this.boundaryHitCooldown = 0;
     this.hits=0; this.dmgDealt=0;
-    for(let i=0;i<cfg.length;i++)
-      this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE, y:y-Math.sin(angle)*i*SEGMENT_SIZE});
+    for(let i=0;i<cfg.length;i++) this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE, y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
   turn(dir){ this.angle+=dir*this.turnSpeed; }
   update(){
@@ -692,43 +670,31 @@ class Snake {
     if(dist>PREDATOR_RADIUS*0.89 - SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.5;
-      nx=this.x+Math.cos(this.angle)*spd;
-      ny=this.y+Math.sin(this.angle)*spd;
-      this.wallSlowTimer=30;
-      addParticles(this.x,this.y,this.color,6);
+      nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
+      this.wallSlowTimer=30; addParticles(this.x,this.y,this.color,6);
       if (gameActive && predDangerPhaseActive && this.boundaryHitCooldown <= 0) {
-          this.hp--;
-          this.boundaryHitCooldown = 30;
-          triggerShake();
-          addParticles(this.x, this.y, '#f00', 30);
-          updateHpBars();
-          if (this.hp <= 0 && !finalSlowMo) {
-              finalSlowMo = true;
-              finalSlowMoFrames = 90;
-          }
+          this.hp--; this.boundaryHitCooldown = 30; triggerShake();
+          addParticles(this.x, this.y, '#f00', 30); updateHpBars();
+          if (this.hp <= 0 && !finalSlowMo) { finalSlowMo = true; finalSlowMoFrames = 90; }
       }
     }
     this.x=nx; this.y=ny;
     this.segments.unshift({x:this.x,y:this.y});
     while(this.segments.length>this.cfg.length) this.segments.pop();
   }
-  draw(){
-    renderSnakeBody(ctx, this);
-  }
+  draw(){ renderSnakeBody(ctx, this); }
 }
+
 let particles=[];
 function addParticles(x,y,color,n){
   n=n||12; if(!settings.particles) return;
   for(let i=0;i<n;i++) particles.push({x,y,vx:(Math.random()-.5)*4,vy:(Math.random()-.5)*4,life:1,color,r:Math.random()*3+1});
 }
-function updateParticles(){
-  particles=particles.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.life-=0.04; p.vx*=0.92; p.vy*=0.92; return p.life>0; });
-}
+function updateParticles(){ particles=particles.filter(p=>{ p.x+=p.vx; p.y+=p.vy; p.life-=0.04; p.vx*=0.92; p.vy*=0.92; return p.life>0; }); }
 function drawParticles(){
   particles.forEach(p=>{
     ctx.save(); ctx.globalAlpha=p.life; ctx.shadowColor=p.color; ctx.shadowBlur=8;
-    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-    ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle=p.color; ctx.fill(); ctx.restore();
   });
 }
 let shakeX=0,shakeY=0,shakePwr=0;
@@ -736,69 +702,51 @@ function triggerShake(){ if(settings.shake) shakePwr=12; }
 function updateShake(){
   if(shakePwr>0){
     shakeX=(Math.random()-.5)*shakePwr; shakeY=(Math.random()-.5)*shakePwr;
-    shakePwr*=0.8;
-    if(shakePwr<0.5){ shakePwr=0; shakeX=0; shakeY=0; }
+    shakePwr*=0.8; if(shakePwr<0.5){ shakePwr=0; shakeX=0; shakeY=0; }
   }
 }
+
 let snake1,snake2,specterSnake,leviathanSnake;
 let gameActive=false, keys={};
-let finalSlowMo=false, finalSlowMoFrames=0;
-let gameStartTime=0;
-let inputDir1={x:0,y:0}, inputDir2={x:0,y:0};
-let bgParticles=[];
-let animFrame=null;
-let predRound = 1, predP1Wins = 0, predP2Wins = 0;
-let inTransition = false;
+let finalSlowMo=false, finalSlowMoFrames=0, gameStartTime=0;
+let inputDir1={x:0,y:0}, inputDir2={x:0,y:0}, bgParticles=[];
+let animFrame=null, predRound = 1, predP1Wins = 0, predP2Wins = 0, inTransition = false;
 const bot={
-  actionFrame:0,lastDecisionFrame:0,state:'wander',stateTimer:0,
-  wanderAngle:0,wanderTimer:0,missTimer:0,feintDir:0,feintTimer:0,
-  baitTimer:0,baitPhase:false,counterTimer:0,trapPhase:false,
+  actionFrame:0,lastDecisionFrame:0,state:'wander',stateTimer:0, wanderAngle:0,wanderTimer:0,missTimer:0,feintDir:0,feintTimer:0, baitTimer:0,baitPhase:false,counterTimer:0,trapPhase:false,
   reset(){
-    this.actionFrame=0; this.lastDecisionFrame=0;
-    this.state='wander'; this.stateTimer=0;
-    this.wanderAngle=Math.random()*Math.PI*2; this.wanderTimer=0; this.missTimer=0;
-    this.feintDir=0; this.feintTimer=0;
-    this.baitTimer=0; this.baitPhase=false;
-    this.counterTimer=0; this.trapPhase=false;
+    this.actionFrame=0; this.lastDecisionFrame=0; this.state='wander'; this.stateTimer=0;
+    this.wanderAngle=Math.random()*Math.PI*2; this.wanderTimer=0; this.missTimer=0; this.feintDir=0; this.feintTimer=0;
+    this.baitTimer=0; this.baitPhase=false; this.counterTimer=0; this.trapPhase=false;
   }
 };
 function applyWander(){
   if(bot.wanderTimer>0){
-    bot.wanderTimer--;
-    let da=bot.wanderAngle-snake2.angle;
+    bot.wanderTimer--; let da=bot.wanderAngle-snake2.angle;
     while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    if(Math.abs(da)>0.05) snake2.turn(Math.sign(da)*0.4);
-    return;
+    if(Math.abs(da)>0.05) snake2.turn(Math.sign(da)*0.4); return;
   }
   if(Math.random()<0.02) snake2.turn((Math.random()-0.5)*2);
 }
 function botThinkEasy(){
-  bot.actionFrame++;
-  const di=60+Math.floor(Math.random()*40);
+  bot.actionFrame++; const di=60+Math.floor(Math.random()*40);
   if(bot.actionFrame-bot.lastDecisionFrame<di){ if(bot.state==='pursue') executeEasyPursuit(); else applyWander(); return; }
-  bot.lastDecisionFrame=bot.actionFrame;
-  const head=snake2.segments[0];
-  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
+  bot.lastDecisionFrame=bot.actionFrame; const head=snake2.segments[0], dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
   if(Math.random()<0.30){ bot.wanderAngle=Math.random()*Math.PI*2; bot.wanderTimer=40+Math.floor(Math.random()*60); bot.state='wander'; }
   else if(dist<PREDATOR_RADIUS*0.6&&Math.random()<0.5){ bot.state='pursue'; bot.missTimer=Math.random()<0.45?30+Math.random()*40:0; }
   else{ bot.state='wander'; bot.wanderAngle=snake2.angle+(Math.random()-0.5)*Math.PI; bot.wanderTimer=50; }
 }
 function executeEasyPursuit(){
   if(bot.missTimer>0){
-    bot.missTimer--;
-    const a=Math.atan2(snake1.y-snake2.y,snake1.x-snake2.x)+1.0+Math.random()*0.5;
-    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    snake2.turn(Math.sign(da)*0.5); return;
+    bot.missTimer--; const a=Math.atan2(snake1.y-snake2.y,snake1.x-snake2.x)+1.0+Math.random()*0.5;
+    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*0.5); return;
   }
   const a=Math.atan2(snake1.y-snake2.y,snake1.x-snake2.x);
   let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
   snake2.turn(Math.sign(da)*Math.min(0.5,Math.abs(da)*0.4));
 }
 function botThinkMedium(){
-  bot.actionFrame++;
-  const head=snake2.segments[0];
-  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
-  const wallDist=PREDATOR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
+  bot.actionFrame++; const head=snake2.segments[0];
+  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y), wallDist=PREDATOR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
   if(bot.feintTimer>0){ bot.feintTimer--; snake2.turn(bot.feintDir*0.9); if(bot.feintTimer===0) bot.state='attack'; return; }
   const di=30+Math.floor(Math.random()*20); 
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeMediumMove(dist,wallDist); return; }
@@ -811,30 +759,20 @@ function botThinkMedium(){
 function executeMediumMove(dist,wallDist){
   const head=snake2.segments[0];
   if(bot.stateTimer>0){
-    bot.stateTimer--;
-    const ca=Math.atan2(CY-head.y,CX-head.x);
-    let da=ca-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    snake2.turn(Math.sign(da)*0.85); return;
+    bot.stateTimer--; const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*0.85); return;
   }
   if(bot.state==='pursue'||bot.state==='attack'){
-    const tx=snake1.x+Math.cos(snake1.angle)*snake1.speed*3; 
-    const ty=snake1.y+Math.sin(snake1.angle)*snake1.speed*3;
-    const a=Math.atan2(ty-head.y,tx-head.x);
-    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    const tx=snake1.x+Math.cos(snake1.angle)*snake1.speed*3, ty=snake1.y+Math.sin(snake1.angle)*snake1.speed*3;
+    const a=Math.atan2(ty-head.y,tx-head.x); let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.5)*Math.min(0.8,Math.abs(da)*1.0)); 
   } else if(bot.state==='wander'){ applyWander(); }
   else {
-    const a=Math.atan2(snake1.y-head.y,snake1.x-head.x);
-    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    snake2.turn(Math.sign(da)*0.7);
+    const a=Math.atan2(snake1.y-head.y,snake1.x-head.x); let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*0.7);
   }
 }
 function botThinkHard(){
-  bot.actionFrame++;
-  const head=snake2.segments[0];
-  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y);
-  const wallDist=PREDATOR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
-  const playerWallDist=PREDATOR_RADIUS*0.89-Math.hypot(snake1.x-CX,snake1.y-CY);
+  bot.actionFrame++; const head=snake2.segments[0];
+  const dist=Math.hypot(snake1.x-head.x,snake1.y-head.y), wallDist=PREDATOR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY), playerWallDist=PREDATOR_RADIUS*0.89-Math.hypot(snake1.x-CX,snake1.y-CY);
   const di=15+Math.floor(Math.random()*10); 
   if(bot.actionFrame-bot.lastDecisionFrame<di){ executeHardMove(dist,wallDist,playerWallDist); return; }
   bot.lastDecisionFrame=bot.actionFrame;
@@ -852,20 +790,16 @@ function executeHardMove(dist,wallDist,playerWallDist){
   if(bot.state==='trap'&&bot.stateTimer>0){ bot.stateTimer--; const oa=Math.atan2(snake1.y-head.y,snake1.x-head.x)+Math.PI*0.5; let da=oa-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; snake2.turn(Math.sign(da)*1.1); return; }
   if(bot.state==='attack'||bot.state==='pursue'){
     const predict=bot.state==='attack'?10:6; 
-    let aimX=snake1.x+Math.cos(snake1.angle)*snake1.speed*predict;
-    let aimY=snake1.y+Math.sin(snake1.angle)*snake1.speed*predict;
+    let aimX=snake1.x+Math.cos(snake1.angle)*snake1.speed*predict, aimY=snake1.y+Math.sin(snake1.angle)*snake1.speed*predict;
     if(dist<PREDATOR_RADIUS*0.3&&snake1.segments.length>6){ const mid=snake1.segments[Math.floor(snake1.segments.length*0.45)]; aimX=mid.x; aimY=mid.y; }
-    const a=Math.atan2(aimY-head.y,aimX-head.x);
-    let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    const a=Math.atan2(aimY-head.y,aimX-head.x); let da=a-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     snake2.turn((Math.sign(da)+(Math.random()-0.5)*0.15)*Math.min(1.15,Math.abs(da)*1.4)); 
     if(wallDist<PREDATOR_RADIUS*0.2){ const ca=Math.atan2(CY-head.y,CX-head.x); let cda=ca-snake2.angle; while(cda>Math.PI) cda-=Math.PI*2; while(cda<-Math.PI) cda+=Math.PI*2; snake2.turn(Math.sign(cda)*0.6); }
   }
 }
 function predatorBotThink(){
   if(!gameActive||!snake2||!snake2.alive) return;
-  if(botDiff==='easy') botThinkEasy();
-  else if(botDiff==='medium') botThinkMedium();
-  else botThinkHard();
+  if(botDiff==='easy') botThinkEasy(); else if(botDiff==='medium') botThinkMedium(); else botThinkHard();
 }
 function onBotHit(){ if(botDiff==='hard'){ bot.counterTimer=20; bot.state='attack'; } } 
 function initBgParticles(){
@@ -873,85 +807,50 @@ function initBgParticles(){
   for(let i=0;i<60;i++) bgParticles.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.5+.3,vx:(Math.random()-.5)*.2,vy:(Math.random()-.5)*.2,a:Math.random()*.6+.2});
 }
 function initPositions(){
-  const r=PREDATOR_RADIUS*0.6;
-  const a1=-Math.PI/2, a2=Math.PI/2;
-  const cfg1=SNAKE_CONFIGS[p1Snake];
-  const cfg2=SNAKE_CONFIGS[p2Snake];
+  const r=PREDATOR_RADIUS*0.6, a1=-Math.PI/2, a2=Math.PI/2;
+  const cfg1=SNAKE_CONFIGS[p1Snake], cfg2=SNAKE_CONFIGS[p2Snake];
   snake1=new Snake(cfg1,CX+Math.cos(a1)*r,CY+Math.sin(a1)*r,a2+.3,false);
   snake2=new Snake(cfg2,CX+Math.cos(a2)*r,CY+Math.sin(a2)*r,a1-.3,true);
-  if(p1Snake==='small'){ specterSnake=snake1; leviathanSnake=snake2; }
-  else { specterSnake=snake2; leviathanSnake=snake1; }
-  bot.reset();
-  bot.wanderAngle=Math.atan2(CY-snake2.y,CX-snake2.x)+Math.PI;
+  if(p1Snake==='small'){ specterSnake=snake1; leviathanSnake=snake2; } else { specterSnake=snake2; leviathanSnake=snake1; }
+  bot.reset(); bot.wanderAngle=Math.atan2(CY-snake2.y,CX-snake2.x)+Math.PI;
 }
 function startGame(){
-  showScreen('screen-game');
-  stopMenuMusic();
-  initBgParticles();
-  predRound = 1; predP1Wins = 0; predP2Wins = 0;
-  startPredatorRound();
+  showScreen('screen-game'); stopMenuMusic(); initBgParticles(); predRound = 1; predP1Wins = 0; predP2Wins = 0; startPredatorRound();
 }
-function restartGame(){
-  showScreen('screen-game');
-  predRound = 1; predP1Wins = 0; predP2Wins = 0;
-  startPredatorRound();
-}
+function restartGame(){ showScreen('screen-game'); predRound = 1; predP1Wins = 0; predP2Wins = 0; startPredatorRound(); }
+
 function startPredatorRound() {
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
   const maxHp = (predRound === 3) ? 10 : 15;
   initPositions();
-  predatorCam.x = snake1.x;
-  predatorCam.y = snake1.y;
-  snake1.maxHp = maxHp; snake1.hp = maxHp;
-  snake2.maxHp = maxHp; snake2.hp = maxHp;
-  let p1Name = p1Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN';
-  let p2Name = p2Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN';
+  predatorCam.x = snake1.x; predatorCam.y = snake1.y;
+  snake1.maxHp = maxHp; snake1.hp = maxHp; snake2.maxHp = maxHp; snake2.hp = maxHp;
+  let p1Name = p1Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN', p2Name = p2Snake === 'small' ? '⚡ SPECTER' : '💥 LEVIATHAN';
   if(gameMode === 'bot') p2Name = p2Snake === 'small' ? '🤖 SPECTER BOT' : '🤖 LEVIATHAN BOT';
-  if(gameMode === 'local') {
-      p1Name = 'P1 ' + p1Name;
-      p2Name = 'P2 ' + p2Name;
-  }
-  document.getElementById('p1-name-display').textContent = p1Name;
-  document.getElementById('p2-name-display').textContent = p2Name;
-  document.getElementById('p1-name-display').style.color = snake1.color;
-  document.getElementById('p2-name-display').style.color = snake2.color;
-  document.getElementById('hp-text-p1').style.color = snake1.color;
-  document.getElementById('hp-text-p2').style.color = snake2.color;
+  if(gameMode === 'local') { p1Name = 'P1 ' + p1Name; p2Name = 'P2 ' + p2Name; }
+  document.getElementById('p1-name-display').textContent = p1Name; document.getElementById('p2-name-display').textContent = p2Name;
+  document.getElementById('p1-name-display').style.color = snake1.color; document.getElementById('p2-name-display').style.color = snake2.color;
+  document.getElementById('hp-text-p1').style.color = snake1.color; document.getElementById('hp-text-p2').style.color = snake2.color;
   document.getElementById('hp-bar-p1').style.background = `linear-gradient(90deg, ${snake1.glow}, ${snake1.color})`;
   document.getElementById('hp-bar-p1').style.boxShadow = `0 0 8px ${snake1.glow}`;
   document.getElementById('hp-bar-p2').style.background = `linear-gradient(90deg, ${snake2.glow}, ${snake2.color})`;
   document.getElementById('hp-bar-p2').style.boxShadow = `0 0 8px ${snake2.glow}`;
   updateHpBars();
   document.getElementById('predator-round-label').textContent = predRound === 3 ? 'FINAL ROUND' : 'ROUND ' + predRound;
-  document.getElementById('p1-wins-text').textContent = predP1Wins;
-  document.getElementById('p2-wins-text').textContent = predP2Wins;
-  gameActive = false;
-  inTransition = true;
-  document.getElementById('joystick-left').classList.add('hidden');
-  document.getElementById('joystick-right').classList.add('hidden');
+  document.getElementById('p1-wins-text').textContent = predP1Wins; document.getElementById('p2-wins-text').textContent = predP2Wins;
+  gameActive = false; inTransition = true;
+  document.getElementById('joystick-left').classList.add('hidden'); document.getElementById('joystick-right').classList.add('hidden');
   document.getElementById('btn-pause').classList.add('hidden');
-  const trans = document.getElementById('predator-transition');
-  trans.classList.remove('hidden');
+  const trans = document.getElementById('predator-transition'); trans.classList.remove('hidden');
   document.getElementById('trans-title').textContent = predRound === 3 ? 'FINAL ROUND' : 'ROUND ' + predRound;
   document.getElementById('trans-sub').textContent = 'START';
-  ctx.save();
-  ctx.clearRect(0, 0, W, H);
-  const camOffX = CX - predatorCam.x;
-  const camOffY = CY - predatorCam.y;
-  ctx.save();
-  ctx.translate(camOffX, camOffY);
-  drawArena();
-  snake1.draw(); snake2.draw();
-  ctx.restore();
-  ctx.restore();
+  ctx.save(); ctx.clearRect(0, 0, W, H);
+  const camOffX = CX - predatorCam.x, camOffY = CY - predatorCam.y;
+  ctx.save(); ctx.translate(camOffX, camOffY); drawArena(); snake1.draw(); snake2.draw(); ctx.restore(); ctx.restore();
   setTimeout(() => {
     if(currentScreen !== 'screen-game') return; 
-    trans.classList.add('hidden');
-    gameActive = true;
-    inTransition = false;
-    particles = []; finalSlowMo = false; finalSlowMoFrames = 0;
-    predDangerPhaseActive = false;
-    predDangerPhaseTimer = Date.now() + 10000;
+    trans.classList.add('hidden'); gameActive = true; inTransition = false;
+    particles = []; finalSlowMo = false; finalSlowMoFrames = 0; predDangerPhaseActive = false; predDangerPhaseTimer = Date.now() + 10000;
     document.getElementById('btn-pause').removeProperty ? document.getElementById('btn-pause').classList.remove('hidden') : document.getElementById('btn-pause').className = "btn";
     const isMobile = 'ontouchstart' in window;
     document.getElementById('joystick-left').classList.toggle('hidden', !isMobile);
@@ -962,38 +861,24 @@ function startPredatorRound() {
 }
 function updateHpBars(){
   const sp=Math.max(0,snake1.hp/snake1.maxHp)*100;
-  document.getElementById('hp-bar-p1').style.width=sp+'%';
-  document.getElementById('hp-text-p1').textContent=`${Math.max(0,snake1.hp)}/${snake1.maxHp}`;
+  document.getElementById('hp-bar-p1').style.width=sp+'%'; document.getElementById('hp-text-p1').textContent=`${Math.max(0,snake1.hp)}/${snake1.maxHp}`;
   const lp=Math.max(0,snake2.hp/snake2.maxHp)*100;
-  document.getElementById('hp-bar-p2').style.width=lp+'%';
-  document.getElementById('hp-text-p2').textContent=`${Math.max(0,snake2.hp)}/${snake2.maxHp}`;
+  document.getElementById('hp-bar-p2').style.width=lp+'%'; document.getElementById('hp-text-p2').textContent=`${Math.max(0,snake2.hp)}/${snake2.maxHp}`;
 }
 function checkHit(attacker,defender){
   if(!attacker.alive || !defender.alive) return;
   if(attacker.hitCooldown>0) return;
-  const head=attacker.segments[0];
-  const limit = Math.floor(defender.segments.length * 0.5);
+  const head=attacker.segments[0], limit = Math.floor(defender.segments.length * 0.5);
   for(let i=2;i<limit;i++){
     const s=defender.segments[i];
     if(Math.hypot(head.x-s.x,head.y-s.y)<SEGMENT_SIZE*1.6){
-      defender.hp--; attacker.hits++; attacker.dmgDealt++;
-      attacker.hitCooldown=40; defender.hitCooldown=20;
-      const dx = head.x - s.x;
-      const dy = head.y - s.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      const bounceAngle = Math.atan2(dy, dx);
+      defender.hp--; attacker.hits++; attacker.dmgDealt++; attacker.hitCooldown=40; defender.hitCooldown=20;
+      const dx = head.x - s.x, dy = head.y - s.y, dist = Math.hypot(dx, dy) || 1, bounceAngle = Math.atan2(dy, dx);
       attacker.angle = bounceAngle + (Math.random()-0.5)*0.5;
-      const knockback = 30;
-      const kx = (dx / dist) * knockback;
-      const ky = (dy / dist) * knockback;
-      attacker.x += kx; 
-      attacker.y += ky;
-      for (let j = 0; j < attacker.segments.length; j++) {
-          attacker.segments[j].x += kx;
-          attacker.segments[j].y += ky;
-      }
-      attacker.wallSlowTimer = 20; 
-      triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
+      const knockback = 30, kx = (dx / dist) * knockback, ky = (dy / dist) * knockback;
+      attacker.x += kx; attacker.y += ky;
+      for (let j = 0; j < attacker.segments.length; j++) { attacker.segments[j].x += kx; attacker.segments[j].y += ky; }
+      attacker.wallSlowTimer = 20; triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
       if(defender===snake2&&gameMode==='bot') onBotHit();
       if(defender.hp<=0 && !finalSlowMo){ finalSlowMo=true; finalSlowMoFrames=90; }
       break;
@@ -1004,77 +889,35 @@ function gameLoop(){
   if(!gameActive) return;
   if(isPaused){ animFrame=requestAnimationFrame(gameLoop); return; }
   const now = Date.now();
-  if (now >= predDangerPhaseTimer) {
-      predDangerPhaseActive = !predDangerPhaseActive;
-      predDangerPhaseTimer = now + (predDangerPhaseActive ? 15000 : 10000);
-  }
+  if (now >= predDangerPhaseTimer) { predDangerPhaseActive = !predDangerPhaseActive; predDangerPhaseTimer = now + (predDangerPhaseActive ? 15000 : 10000); }
   updateShake();
-  let targetCamX = snake1.x;
-  let targetCamY = snake1.y;
-  if(gameMode === 'local' && snake2 && snake2.alive) {
-      targetCamX = (snake1.x + snake2.x) / 2;
-      targetCamY = (snake1.y + snake2.y) / 2;
-  }
-  predatorCam.x += (targetCamX - predatorCam.x) * 0.08;
-  predatorCam.y += (targetCamY - predatorCam.y) * 0.08;
-  const camOffX = CX - predatorCam.x;
-  const camOffY = CY - predatorCam.y;
-  ctx.save(); ctx.translate(shakeX,shakeY);
-  ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
-  ctx.save();
-  ctx.translate(camOffX, camOffY);
-  drawArena();
-  handleInput();
+  let targetCamX = snake1.x, targetCamY = snake1.y;
+  if(gameMode === 'local' && snake2 && snake2.alive) { targetCamX = (snake1.x + snake2.x) / 2; targetCamY = (snake1.y + snake2.y) / 2; }
+  predatorCam.x += (targetCamX - predatorCam.x) * 0.08; predatorCam.y += (targetCamY - predatorCam.y) * 0.08;
+  const camOffX = CX - predatorCam.x, camOffY = CY - predatorCam.y;
+  ctx.save(); ctx.translate(shakeX,shakeY); ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
+  ctx.save(); ctx.translate(camOffX, camOffY); drawArena(); handleInput();
   if(gameMode==='bot') predatorBotThink();
-  snake1.update(); snake2.update();
-  checkHit(snake1,snake2); checkHit(snake2,snake1);
-  enforceSolidBodies(snake1, snake2, 0.5);
-  enforceSolidBodies(snake2, snake1, 0.5);
-  updateParticles();
-  if(finalSlowMo){ 
-    finalSlowMoFrames--; 
-    if(finalSlowMoFrames<=0){ 
-      ctx.restore(); 
-      ctx.restore();
-      handleRoundEnd(); 
-      return; 
-    } 
-  }
-  snake1.draw(); snake2.draw(); drawParticles();
-  ctx.restore();
-  ctx.restore();
+  snake1.update(); snake2.update(); checkHit(snake1,snake2); checkHit(snake2,snake1);
+  enforceSolidBodies(snake1, snake2, 0.5); enforceSolidBodies(snake2, snake1, 0.5); updateParticles();
+  if(finalSlowMo){ finalSlowMoFrames--; if(finalSlowMoFrames<=0){ ctx.restore(); ctx.restore(); handleRoundEnd(); return; } }
+  snake1.draw(); snake2.draw(); drawParticles(); ctx.restore(); ctx.restore();
   animFrame=requestAnimationFrame(gameLoop);
 }
 function handleRoundEnd() {
   gameActive = false;
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
-  document.getElementById('btn-pause').classList.add('hidden');
-  document.getElementById('joystick-left').classList.add('hidden');
-  document.getElementById('joystick-right').classList.add('hidden');
+  document.getElementById('btn-pause').classList.add('hidden'); document.getElementById('joystick-left').classList.add('hidden'); document.getElementById('joystick-right').classList.add('hidden');
   const p1WinsRound = snake2.hp <= 0;
-  if (p1WinsRound) predP1Wins++;
-  else predP2Wins++;
-  const trans = document.getElementById('predator-transition');
-  trans.classList.remove('hidden');
+  if (p1WinsRound) predP1Wins++; else predP2Wins++;
+  const trans = document.getElementById('predator-transition'); trans.classList.remove('hidden');
   let winnerLabel = "";
-  if (gameMode === 'bot') {
-      if (p1WinsRound) winnerLabel = p1Snake==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
-      else winnerLabel = '🤖 BOT';
-  } else {
-      winnerLabel = p1WinsRound ? 'P1 '+(p1Snake==='small'?'SPECTER':'LEVIATHAN') : 'P2 '+(p2Snake==='small'?'SPECTER':'LEVIATHAN');
-  }
+  if (gameMode === 'bot') { if (p1WinsRound) winnerLabel = p1Snake==='small'?'⚡ SPECTER':'💥 LEVIATHAN'; else winnerLabel = '🤖 BOT'; }
+  else { winnerLabel = p1WinsRound ? 'P1 '+(p1Snake==='small'?'SPECTER':'LEVIATHAN') : 'P2 '+(p2Snake==='small'?'SPECTER':'LEVIATHAN'); }
   document.getElementById('trans-title').textContent = predRound === 3 ? 'FINAL ROUND OVER' : 'ROUND ' + predRound + ' OVER';
   document.getElementById('trans-sub').textContent = 'Winner: ' + winnerLabel;
-  document.getElementById('p1-wins-text').textContent = predP1Wins;
-  document.getElementById('p2-wins-text').textContent = predP2Wins;
-  setTimeout(() => {
-     if (predP1Wins === 2 || predP2Wins === 2) {
-         endPredatorMatch();
-     } else {
-         predRound++;
-         startPredatorRound();
-     }
-  }, 2500);
+  document.getElementById('p1-wins-text').textContent = predP1Wins; document.getElementById('p2-wins-text').textContent = predP2Wins;
+  setTimeout(() => { if (predP1Wins === 2 || predP2Wins === 2) endPredatorMatch(); else { predRound++; startPredatorRound(); } }, 2500);
 }
 function endPredatorMatch() {
   document.getElementById('predator-transition').classList.add('hidden');
@@ -1082,61 +925,43 @@ function endPredatorMatch() {
   gameActive=false;
   const p1WinsMatch = predP1Wins === 2;
   let matchWinnerLabel;
-  if (gameMode === 'bot') {
-    matchWinnerLabel = p1WinsMatch ? (p1Snake==='small'?'⚡ SPECTER':'💥 LEVIATHAN') + ' WINS THE MATCH!' : '🤖 BOT WINS THE MATCH!';
-  } else {
-    matchWinnerLabel = p1WinsMatch ? 'P1 '+(p1Snake==='small'?'SPECTER':'LEVIATHAN') + ' WINS THE MATCH!' : 'P2 '+(p2Snake==='small'?'SPECTER':'LEVIATHAN') + ' WINS THE MATCH!';
-  }
+  if (gameMode === 'bot') matchWinnerLabel = p1WinsMatch ? (p1Snake==='small'?'⚡ SPECTER':'💥 LEVIATHAN') + ' WINS THE MATCH!' : '🤖 BOT WINS THE MATCH!';
+  else matchWinnerLabel = p1WinsMatch ? 'P1 '+(p1Snake==='small'?'SPECTER':'LEVIATHAN') + ' WINS THE MATCH!' : 'P2 '+(p2Snake==='small'?'SPECTER':'LEVIATHAN') + ' WINS THE MATCH!';
   const score = p1WinsMatch ? `2-${predP2Wins}` : `${predP1Wins}-2`;
-  showResultScreen(matchWinnerLabel, p1WinsMatch,
-    `<div style="grid-column:1/-1; text-align:center; font-size:24px; font-weight:bold; color:#0ff; text-shadow:0 0 10px #0af;">Final Score: ${score}</div>`,
-    'predator');
+  showResultScreen(matchWinnerLabel, p1WinsMatch, `<div style="grid-column:1/-1; text-align:center; font-size:24px; font-weight:bold; color:#0ff; text-shadow:0 0 10px #0af;">Final Score: ${score}</div>`, 'predator');
 }
 document.addEventListener('keydown',e=>{ 
   keys[e.key]=true; 
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight', ' '].includes(e.key)) e.preventDefault(); 
   if (e.key === ' ' && GAME_SCREENS.has(currentScreen)) {
-    if (!isPaused && (gameActive || trActive || stwActive)) {
-      pauseGame();
-    } else if (isPaused) {
-      resumeGame();
-    }
+    if (!isPaused && (gameActive || trActive || stwActive)) pauseGame();
+    else if (isPaused) resumeGame();
   }
 });
 document.addEventListener('keyup',e=>{ keys[e.key]=false; });
 function handleInput(){
-  if(keys['a']||keys['A']) snake1.turn(-1);
-  if(keys['d']||keys['D']) snake1.turn(1);
-  if(keys['w']||keys['W']) snake1.speed = 6.0;
-  else if(keys['s']||keys['S']) snake1.speed = 3.0;
-  else snake1.speed = snake1.cfg.speed;
+  if(keys['a']||keys['A']) snake1.turn(-1); if(keys['d']||keys['D']) snake1.turn(1);
+  if(keys['w']||keys['W']) snake1.speed = 6.0; else if(keys['s']||keys['S']) snake1.speed = 3.0; else snake1.speed = snake1.cfg.speed;
   if(gameMode==='local'){
-    if(keys['ArrowLeft'])  snake2.turn(-1);
-    if(keys['ArrowRight']) snake2.turn(1);
-    if(keys['ArrowUp']) snake2.speed = 6.0;
-    else if(keys['ArrowDown']) snake2.speed = 3.0;
-    else snake2.speed = snake2.cfg.speed;
+    if(keys['ArrowLeft'])  snake2.turn(-1); if(keys['ArrowRight']) snake2.turn(1);
+    if(keys['ArrowUp']) snake2.speed = 6.0; else if(keys['ArrowDown']) snake2.speed = 3.0; else snake2.speed = snake2.cfg.speed;
   }
   if(inputDir1.x!==0||inputDir1.y!==0){
-    const ta=Math.atan2(inputDir1.y,inputDir1.x);
-    let da=ta-snake1.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    const ta=Math.atan2(inputDir1.y,inputDir1.x); let da=ta-snake1.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     snake1.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
   }
   if((inputDir2.x!==0||inputDir2.y!==0)&&gameMode==='local'){
-    const ta=Math.atan2(inputDir2.y,inputDir2.x);
-    let da=ta-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    const ta=Math.atan2(inputDir2.y,inputDir2.x); let da=ta-snake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     snake2.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
   }
 }
 function drawArena(){
   const r=(stwActive&&STW_RADIUS)?STW_RADIUS:(gameActive?PREDATOR_RADIUS:(trActive?current_TR_RADIUS:RADIUS));
   if (trActive && trVariant === 'gate') {
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,30,60,0.6)';
+    ctx.save(); ctx.fillStyle = 'rgba(0,30,60,0.6)';
     for (let c of gateChambers) {
       ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
-      ctx.strokeStyle='rgba(0,200,255,.35)'; ctx.lineWidth=2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.strokeStyle='rgba(0,200,255,.35)'; ctx.lineWidth=2; ctx.stroke();
     }
     for (let c of gateChambers) {
       ctx.beginPath();
@@ -1145,105 +970,118 @@ function drawArena(){
       if (c.dir === 'left') { ctx.rect(c.x, CY - GATE_WIDTH/2, CX - c.x, GATE_WIDTH); }
       if (c.dir === 'right') { ctx.rect(CX, CY - GATE_WIDTH/2, c.x - CX, GATE_WIDTH); }
       if (gateState === 'closed') {
-        ctx.fillStyle = 'rgba(0, 80, 180, 0.2)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(0, 200, 255, 0.35)'; 
-        ctx.lineWidth = 4;
-        if(c.dir === 'top' || c.dir === 'bot') {
-          ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, c.dir==='top'?CY-r:CY+r); ctx.lineTo(CX + GATE_WIDTH/2, c.dir==='top'?CY-r:CY+r); ctx.stroke();
-        } else {
-          ctx.beginPath(); ctx.moveTo(c.dir==='left'?CX-r:CX+r, CY - GATE_WIDTH/2); ctx.lineTo(c.dir==='left'?CX-r:CX+r, CY + GATE_WIDTH/2); ctx.stroke();
-        }
-      } else {
-        ctx.fillStyle = 'rgba(0,30,60,0.6)';
-        ctx.fill();
-      }
+        ctx.fillStyle = 'rgba(0, 80, 180, 0.2)'; ctx.fill(); ctx.strokeStyle = 'rgba(0, 200, 255, 0.35)'; ctx.lineWidth = 4;
+        if(c.dir === 'top' || c.dir === 'bot') { ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, c.dir==='top'?CY-r:CY+r); ctx.lineTo(CX + GATE_WIDTH/2, c.dir==='top'?CY-r:CY+r); ctx.stroke(); }
+        else { ctx.beginPath(); ctx.moveTo(c.dir==='left'?CX-r:CX+r, CY - GATE_WIDTH/2); ctx.lineTo(c.dir==='left'?CX-r:CX+r, CY + GATE_WIDTH/2); ctx.stroke(); }
+      } else { ctx.fillStyle = 'rgba(0,30,60,0.6)'; ctx.fill(); }
     }
     ctx.restore();
   } else if (trActive && trVariant === 'survival') {
     ctx.save();
     ctx.fillStyle = 'rgba(0,30,60,0.6)';
-    for (let c of survivalChambers) {
+    for (let i=0; i<survivalChambers.length; i++) {
+        let c = survivalChambers[i];
         ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
-        ctx.strokeStyle='rgba(255,50,50,.35)'; ctx.lineWidth=2; ctx.stroke();
+        let isActive = (survivalState === 'gate_open' && survivalActiveGate === i);
+        let isOccupied = (survivalState === 'cannon' && survivalActiveGate === i);
+        ctx.strokeStyle = (isActive || isOccupied) ? 'rgba(0,255,255,.5)' : 'rgba(255,50,50,.35)';
+        ctx.lineWidth = 2; ctx.stroke();
     }
-    for (let c of survivalChambers) {
+    for (let i=0; i<survivalChambers.length; i++) {
+        let c = survivalChambers[i];
+        let isActive = (survivalState === 'gate_open' && survivalActiveGate === i);
+        let isOccupied = (survivalState === 'cannon' && survivalActiveGate === i);
+
         ctx.beginPath();
-        if (c.dir === 'top') { ctx.rect(CX - GATE_WIDTH/2, c.y, GATE_WIDTH, CY - c.y); }
-        if (c.dir === 'bot') { ctx.rect(CX - GATE_WIDTH/2, CY, GATE_WIDTH, c.y - CY); }
-        if (survivalState === 'closed_initial' || survivalState === 'closed_trapped') {
-            ctx.fillStyle = 'rgba(180, 0, 50, 0.2)';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 50, 50, 0.35)';
-            ctx.lineWidth = 4;
-            if(c.dir === 'top') {
-                ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, CY - r); ctx.lineTo(CX + GATE_WIDTH/2, CY - r); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, c.y + c.r); ctx.lineTo(CX + GATE_WIDTH/2, c.y + c.r); ctx.stroke();
-            } else {
-                ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, CY + r); ctx.lineTo(CX + GATE_WIDTH/2, CY + r); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, c.y - c.r); ctx.lineTo(CX + GATE_WIDTH/2, c.y - c.r); ctx.stroke();
-            }
-        } else {
-            ctx.fillStyle = 'rgba(60,30,30,0.6)';
-            ctx.fill();
+        if (c.dir === 'top') ctx.rect(CX - GATE_WIDTH/2, c.y, GATE_WIDTH, CY - c.y);
+        if (c.dir === 'bot') ctx.rect(CX - GATE_WIDTH/2, CY, GATE_WIDTH, c.y - CY);
+        if (c.dir === 'left') ctx.rect(c.x, CY - GATE_WIDTH/2, CX - c.x, GATE_WIDTH);
+        if (c.dir === 'right') ctx.rect(CX, CY - GATE_WIDTH/2, c.x - CX, GATE_WIDTH);
+
+        if (!isActive && !isOccupied) {
+            ctx.fillStyle = 'rgba(180, 0, 50, 0.2)'; ctx.fill(); ctx.strokeStyle = 'rgba(255, 50, 50, 0.7)'; ctx.lineWidth = 4;
+            if(c.dir === 'top') { ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, CY - r); ctx.lineTo(CX + GATE_WIDTH/2, CY - r); ctx.stroke(); }
+            else if(c.dir === 'bot') { ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, CY + r); ctx.lineTo(CX + GATE_WIDTH/2, CY + r); ctx.stroke(); }
+            else if(c.dir === 'left') { ctx.beginPath(); ctx.moveTo(CX - r, CY - GATE_WIDTH/2); ctx.lineTo(CX - r, CY + GATE_WIDTH/2); ctx.stroke(); }
+            else if(c.dir === 'right') { ctx.beginPath(); ctx.moveTo(CX + r, CY - GATE_WIDTH/2); ctx.lineTo(CX + r, CY + GATE_WIDTH/2); ctx.stroke(); }
+        } else if (isActive) {
+            ctx.fillStyle = 'rgba(0, 200, 255, 0.15)'; ctx.fill(); ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)'; ctx.lineWidth = 2;
+            if(c.dir === 'top' || c.dir === 'bot') { ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, c.y); ctx.lineTo(CX - GATE_WIDTH/2, CY + (c.dir==='top'?-r:r)); ctx.stroke(); ctx.beginPath(); ctx.moveTo(CX + GATE_WIDTH/2, c.y); ctx.lineTo(CX + GATE_WIDTH/2, CY + (c.dir==='top'?-r:r)); ctx.stroke(); }
+            else { ctx.beginPath(); ctx.moveTo(c.x, CY - GATE_WIDTH/2); ctx.lineTo(CX + (c.dir==='left'?-r:r), CY - GATE_WIDTH/2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(c.x, CY + GATE_WIDTH/2); ctx.lineTo(CX + (c.dir==='left'?-r:r), CY + GATE_WIDTH/2); ctx.stroke(); }
+        } else if (isOccupied) {
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.05)'; ctx.fill(); ctx.strokeStyle = 'rgba(255, 50, 50, 0.7)'; ctx.lineWidth = 4;
+            if(c.dir === 'top') { ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, CY - r); ctx.lineTo(CX + GATE_WIDTH/2, CY - r); ctx.stroke(); }
+            else if(c.dir === 'bot') { ctx.beginPath(); ctx.moveTo(CX - GATE_WIDTH/2, CY + r); ctx.lineTo(CX + GATE_WIDTH/2, CY + r); ctx.stroke(); }
+            else if(c.dir === 'left') { ctx.beginPath(); ctx.moveTo(CX - r, CY - GATE_WIDTH/2); ctx.lineTo(CX - r, CY + GATE_WIDTH/2); ctx.stroke(); }
+            else if(c.dir === 'right') { ctx.beginPath(); ctx.moveTo(CX + r, CY - GATE_WIDTH/2); ctx.lineTo(CX + r, CY + GATE_WIDTH/2); ctx.stroke(); }
         }
+    }
+
+    if (survivalState === 'cannon' && survivalCannons.length > 0) {
+        survivalCannons.forEach(cannon => {
+            let prog = cannon.emergeProgress;
+            let cX = CX + Math.cos(cannon.angle) * current_TR_RADIUS * 0.89;
+            let cY = CY + Math.sin(cannon.angle) * current_TR_RADIUS * 0.89;
+            let targetX = cannon.target ? cannon.target.x : CX;
+            let targetY = cannon.target ? cannon.target.y : CY;
+            let aimAngle = Math.atan2(targetY - cY, targetX - cX);
+
+            ctx.save();
+            ctx.translate(cX, cY);
+            let baseAngle = Math.atan2(CY - cY, CX - cX);
+            ctx.rotate(baseAngle);
+            ctx.scale(prog, prog);
+            ctx.fillStyle = '#2a2e35'; ctx.fillRect(-10, -20, 20, 40);
+            ctx.strokeStyle = '#0ff'; ctx.lineWidth = 1.5; ctx.strokeRect(-10, -20, 20, 40);
+            ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI*2); ctx.fillStyle = '#111'; ctx.fill(); ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.translate(cX, cY);
+            ctx.rotate(aimAngle);
+            ctx.scale(prog, prog);
+            ctx.fillStyle = '#333'; ctx.fillRect(0, -10, 45, 20);
+            ctx.strokeStyle = '#0af'; ctx.lineWidth = 2; ctx.strokeRect(0, -10, 45, 20);
+            ctx.beginPath(); ctx.arc(5, 0, 8, 0, Math.PI*2);
+            ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15; ctx.fill();
+
+            let ringT = (Date.now() % 1000) / 1000;
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)'; ctx.lineWidth = 3;
+            let ringX = 15 + ringT * 25;
+            ctx.beginPath(); ctx.moveTo(ringX, -14); ctx.lineTo(ringX, 14); ctx.stroke();
+            ctx.restore();
+        });
     }
     ctx.restore();
   }
   const grad=ctx.createRadialGradient(CX,CY,r*.7,CX,CY,r);
   grad.addColorStop(0,'rgba(0,30,60,0)');
-  if (gameActive && predDangerPhaseActive) {
-      grad.addColorStop(1,'rgba(180,0,30,.2)');
-  } else {
-      grad.addColorStop(1,'rgba(0,80,180,.12)');
-  }
+  if (gameActive && predDangerPhaseActive) { grad.addColorStop(1,'rgba(180,0,30,.2)'); }
+  else { grad.addColorStop(1,'rgba(0,80,180,.12)'); }
   ctx.beginPath(); ctx.arc(CX,CY,r,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
   ctx.save();
   if (arenaImage.complete && arenaImage.naturalWidth > 0) {
     const imgSize = r * 1.05; 
-    if (gameActive && predDangerPhaseActive) {
-        const t = Date.now() / 150;
-        ctx.shadowColor = '#f00';
-        ctx.shadowBlur = 25 + Math.sin(t) * 10;
-    } else {
-        ctx.shadowColor = '#0ff';
-        ctx.shadowBlur = 15;
-    }
+    if (gameActive && predDangerPhaseActive) { const t = Date.now() / 150; ctx.shadowColor = '#f00'; ctx.shadowBlur = 25 + Math.sin(t) * 10; }
+    else { ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15; }
     ctx.drawImage(arenaImage, CX - imgSize, CY - imgSize, imgSize * 2, imgSize * 2);
     if (gameActive && predDangerPhaseActive) {
         const t2 = Date.now() / 200;
-        ctx.beginPath();
-        ctx.arc(CX, CY, r, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 0, 50, ${0.7 + Math.sin(t2) * 0.3})`;
-        ctx.lineWidth = 8 + Math.sin(t2 * 2) * 4;
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 0, 50, ${0.7 + Math.sin(t2) * 0.3})`; ctx.lineWidth = 8 + Math.sin(t2 * 2) * 4; ctx.stroke();
         for (let i = 0; i < 12; i++) {
             let angle = (t2 * 0.5) + (i * (Math.PI * 2 / 12));
             let sparkR = r + Math.sin(t2 * 3 + i) * 8;
-            ctx.beginPath();
-            ctx.arc(CX + Math.cos(angle) * sparkR, CY + Math.sin(angle) * sparkR, 4, 0, Math.PI*2);
-            ctx.fillStyle = '#fff';
-            ctx.shadowColor = '#f00';
-            ctx.shadowBlur = 10;
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(CX + Math.cos(angle) * sparkR, CY + Math.sin(angle) * sparkR, 4, 0, Math.PI*2);
+            ctx.fillStyle = '#fff'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10; ctx.fill();
         }
     }
   } else {
-    ctx.beginPath(); 
-    ctx.arc(CX, CY, r, 0, Math.PI*2);
-    if (gameActive && predDangerPhaseActive) {
-        const t2 = Date.now() / 200;
-        ctx.strokeStyle = `rgba(255, 0, 50, ${0.7 + Math.sin(t2) * 0.3})`;
-        ctx.lineWidth = 6 + Math.sin(t2 * 2) * 4;
-    } else {
-        ctx.strokeStyle = '#ff0044'; 
-        ctx.lineWidth = 3; 
-    }
-    ctx.stroke();
-    ctx.fillStyle = '#ff0044';
-    ctx.font = 'bold 16px Arial';
-    ctx.textAlign = 'center';
+    ctx.beginPath(); ctx.arc(CX, CY, r, 0, Math.PI*2);
+    if (gameActive && predDangerPhaseActive) { const t2 = Date.now() / 200; ctx.strokeStyle = `rgba(255, 0, 50, ${0.7 + Math.sin(t2) * 0.3})`; ctx.lineWidth = 6 + Math.sin(t2 * 2) * 4; }
+    else { ctx.strokeStyle = '#ff0044'; ctx.lineWidth = 3; }
+    ctx.stroke(); ctx.fillStyle = '#ff0044'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center';
     ctx.fillText("⚠️ IMAGE FAILED TO LOAD", CX, CY - r - 20);
     ctx.fillText("Ensure 'hud_border.png' is in the same folder as the HTML file", CX, CY - r + 25);
   }
@@ -1256,13 +1094,9 @@ function drawArena(){
       if (c.dir === 'bot') { ctx.rect(CX - GATE_WIDTH/2 + 2, CY + r - 10, GATE_WIDTH - 4, 20); }
       if (c.dir === 'left') { ctx.rect(CX - r - 10, CY - GATE_WIDTH/2 + 2, 20, GATE_WIDTH - 4); }
       if (c.dir === 'right') { ctx.rect(CX + r - 10, CY - GATE_WIDTH/2 + 2, 20, GATE_WIDTH - 4); }
-      ctx.fillStyle = '#060914'; ctx.fill(); 
-      ctx.fillStyle = 'rgba(0,80,180,.12)'; ctx.fill(); 
+      ctx.fillStyle = '#060914'; ctx.fill(); ctx.fillStyle = 'rgba(0,80,180,.12)'; ctx.fill(); 
     }
-    ctx.strokeStyle = 'rgba(0,200,255,.35)';
-    ctx.lineWidth = 2;
-    ctx.shadowColor = '#0af';
-    ctx.shadowBlur = 18;
+    ctx.strokeStyle = 'rgba(0,200,255,.35)'; ctx.lineWidth = 2; ctx.shadowColor = '#0af'; ctx.shadowBlur = 18;
     for (let c of gateChambers) {
       ctx.beginPath();
       if (c.dir === 'top') { ctx.moveTo(CX-GATE_WIDTH/2, c.y); ctx.lineTo(CX-GATE_WIDTH/2, CY-r); ctx.moveTo(CX+GATE_WIDTH/2, c.y); ctx.lineTo(CX+GATE_WIDTH/2, CY-r); }
@@ -1276,61 +1110,27 @@ function drawArena(){
   if (trActive && trVariant === 'safe') {
       const t = Date.now() / 200;
       if (scState === 'storm') {
-          ctx.save();
-          ctx.fillStyle = 'rgba(0, 20, 50, 0.4)';
-          ctx.fillRect(-W, -H, W*2, H*2); 
+          ctx.save(); ctx.fillStyle = 'rgba(0, 20, 50, 0.4)'; ctx.fillRect(-W, -H, W*2, H*2); 
           ctx.beginPath(); ctx.arc(CX, CY, current_TR_RADIUS, 0, Math.PI*2);
-          ctx.strokeStyle = `rgba(50, 150, 255, ${0.4 + Math.sin(t)*0.2})`;
-          ctx.lineWidth = 15;
-          ctx.stroke();
-          if (Math.random() < 0.05) {
-              ctx.fillStyle = 'rgba(100, 200, 255, 0.1)';
-              ctx.beginPath(); ctx.arc(CX, CY, current_TR_RADIUS, 0, Math.PI*2); ctx.fill();
-          }
-          if (Math.random() < 0.3) {
-              let a = Math.random() * Math.PI * 2;
-              let ptR = Math.random() * current_TR_RADIUS;
-              addParticles(CX + Math.cos(a)*ptR, CY + Math.sin(a)*ptR, '#0af', 2);
-          }
+          ctx.strokeStyle = `rgba(50, 150, 255, ${0.4 + Math.sin(t)*0.2})`; ctx.lineWidth = 15; ctx.stroke();
+          if (Math.random() < 0.05) { ctx.fillStyle = 'rgba(100, 200, 255, 0.1)'; ctx.beginPath(); ctx.arc(CX, CY, current_TR_RADIUS, 0, Math.PI*2); ctx.fill(); }
+          if (Math.random() < 0.3) { let a = Math.random() * Math.PI * 2, ptR = Math.random() * current_TR_RADIUS; addParticles(CX + Math.cos(a)*ptR, CY + Math.sin(a)*ptR, '#0af', 2); }
           ctx.restore();
       }
       scChambers.forEach(c => {
-          ctx.save();
-          let pulse = Math.sin(t + c.angle) * 5;
-          ctx.translate(CX, CY);
-          ctx.rotate(c.angle);
-          ctx.beginPath();
+          ctx.save(); let pulse = Math.sin(t + c.angle) * 5;
+          ctx.translate(CX, CY); ctx.rotate(c.angle); ctx.beginPath();
           let pR = current_TR_RADIUS * 0.85; 
           ctx.rect(pR, -c.pathWidth/2 + 2, (c.dist - pR), c.pathWidth - 4);
-          ctx.fillStyle = '#060914';
-          ctx.fill();
-          ctx.fillStyle = 'rgba(0, 80, 180, 0.12)';
-          ctx.fill();
-          ctx.beginPath();
-          ctx.moveTo(current_TR_RADIUS*0.88, -c.pathWidth/2);
-          ctx.lineTo(c.dist, -c.pathWidth/2);
-          ctx.moveTo(current_TR_RADIUS*0.88, c.pathWidth/2);
-          ctx.lineTo(c.dist, c.pathWidth/2);
-          ctx.strokeStyle = 'rgba(0, 200, 255, 0.35)';
-          ctx.lineWidth = 2;
-          ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-          ctx.rotate(-c.angle);
-          ctx.translate(-CX, -CY);
+          ctx.fillStyle = '#060914'; ctx.fill(); ctx.fillStyle = 'rgba(0, 80, 180, 0.12)'; ctx.fill();
+          ctx.beginPath(); ctx.moveTo(current_TR_RADIUS*0.88, -c.pathWidth/2); ctx.lineTo(c.dist, -c.pathWidth/2);
+          ctx.moveTo(current_TR_RADIUS*0.88, c.pathWidth/2); ctx.lineTo(c.dist, c.pathWidth/2);
+          ctx.strokeStyle = 'rgba(0, 200, 255, 0.35)'; ctx.lineWidth = 2; ctx.shadowColor = '#0af'; ctx.shadowBlur = 10; ctx.stroke();
+          ctx.shadowBlur = 0; ctx.rotate(-c.angle); ctx.translate(-CX, -CY);
           ctx.beginPath(); ctx.arc(c.x, c.y, c.r + pulse, 0, Math.PI*2);
-          ctx.fillStyle = '#060914'; ctx.fill();
-          ctx.fillStyle = 'rgba(0, 80, 180, 0.12)'; ctx.fill();
-          ctx.lineWidth = 3;
-          ctx.strokeStyle = '#0ff';
-          ctx.shadowColor = '#0ff';
-          ctx.shadowBlur = 15;
-          ctx.stroke();
-          if (c.occupiedBy) {
-              ctx.fillStyle = c.occupiedBy.color;
-              ctx.globalAlpha = 0.3;
-              ctx.fill();
-          }
+          ctx.fillStyle = '#060914'; ctx.fill(); ctx.fillStyle = 'rgba(0, 80, 180, 0.12)'; ctx.fill();
+          ctx.lineWidth = 3; ctx.strokeStyle = '#0ff'; ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15; ctx.stroke();
+          if (c.occupiedBy) { ctx.fillStyle = c.occupiedBy.color; ctx.globalAlpha = 0.3; ctx.fill(); }
           ctx.restore();
       });
   }
@@ -1346,76 +1146,51 @@ function drawArena(){
 function getGateArenaPush(nx, ny, rad, snake) {
   let distMain = Math.hypot(nx - CX, ny - CY);
   if (distMain <= current_TR_RADIUS*0.89 - rad) return { push: false }; 
-  if (gateState === 'closed') {
-      return { push: true, cx: CX, cy: CY };
-  }
+  if (gateState === 'closed') { return { push: true, cx: CX, cy: CY }; }
   for (let i=0; i<gateChambers.length; i++) {
-      let c = gateChambers[i];
-      let distC = Math.hypot(nx - c.x, ny - c.y);
+      let c = gateChambers[i], distC = Math.hypot(nx - c.x, ny - c.y);
       if (distC <= c.r - rad) return { push: false }; 
       let inGate = false;
-      if (c.dir === 'top') {
-          if (nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > c.y && ny < CY) inGate = true;
-      } else if (c.dir === 'bot') {
-          if (nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > CY && ny < c.y) inGate = true;
-      } else if (c.dir === 'left') {
-          if (ny > CY - GATE_WIDTH/2 && ny < CY + GATE_WIDTH/2 && nx > c.x && nx < CX) inGate = true;
-      } else if (c.dir === 'right') {
-          if (ny > CY - GATE_WIDTH/2 && ny < CY + GATE_WIDTH/2 && nx > CX && nx < c.x) inGate = true;
-      }
+      if (c.dir === 'top') { if (nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > c.y && ny < CY) inGate = true; }
+      else if (c.dir === 'bot') { if (nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > CY && ny < c.y) inGate = true; }
+      else if (c.dir === 'left') { if (ny > CY - GATE_WIDTH/2 && ny < CY + GATE_WIDTH/2 && nx > c.x && nx < CX) inGate = true; }
+      else if (c.dir === 'right') { if (ny > CY - GATE_WIDTH/2 && ny < CY + GATE_WIDTH/2 && nx > CX && nx < c.x) inGate = true; }
       if (inGate) return { push: false };
   }
-  let closest = {x: CX, y: CY};
-  let minDist = distMain - current_TR_RADIUS*0.89;
+  let closest = {x: CX, y: CY}, minDist = distMain - current_TR_RADIUS*0.89;
   for (let i=0; i<gateChambers.length; i++) {
-      let c = gateChambers[i];
-      let d = Math.hypot(nx - c.x, ny - c.y) - c.r;
+      let c = gateChambers[i], d = Math.hypot(nx - c.x, ny - c.y) - c.r;
       if (d < minDist) { minDist = d; closest = {x: c.x, y: c.y}; }
   }
   return { push: true, cx: closest.x, cy: closest.y };
 }
 function getSurvivalArenaPush(nx, ny, rad, snake) {
-  let distMain = Math.hypot(nx - CX, ny - CY);
-  if (distMain <= current_TR_RADIUS*0.89 - rad) return { push: false };
-  if (survivalState === 'closed_initial' || survivalState === 'closed_trapped') {
-      for (let i=0; i<survivalChambers.length; i++) {
-          let c = survivalChambers[i];
-          let distC = Math.hypot(nx - c.x, ny - c.y);
-          if (distC <= c.r - rad) return { push: false };
-      }
-      let closest = {x: CX, y: CY};
-      let minDist = distMain - current_TR_RADIUS*0.89;
-      for (let i=0; i<survivalChambers.length; i++) {
-          let c = survivalChambers[i];
-          let d = Math.hypot(nx - c.x, ny - c.y) - c.r;
-          if (d < minDist) { minDist = d; closest = {x: c.x, y: c.y}; }
-      }
-      return { push: true, cx: closest.x, cy: closest.y };
-  }
-  for (let i=0; i<survivalChambers.length; i++) {
-    let c = survivalChambers[i];
-    let distC = Math.hypot(nx - c.x, ny - c.y);
-    if (distC <= c.r - rad) return { push: false };
-    let inGate = false;
-    if (c.dir === 'top') {
-        if (nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > c.y && ny < CY) inGate = true;
-    } else if (c.dir === 'bot') {
-        if (nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > CY && ny < c.y) inGate = true;
+    let distMain = Math.hypot(nx - CX, ny - CY);
+    let rMain = current_TR_RADIUS * 0.89;
+
+    if (survivalOutsideSnake === snake) {
+        let c = survivalChambers[survivalActiveGate];
+        let distC = Math.hypot(nx - c.x, ny - c.y);
+        if (distC > c.r - rad) { return { push: true, cx: c.x, cy: c.y }; }
+        return { push: false };
     }
-    if (inGate) return { push: false };
-  }
-  let closest = {x: CX, y: CY};
-  let minDist = distMain - current_TR_RADIUS*0.89;
-  for (let i=0; i<survivalChambers.length; i++) {
-      let c = survivalChambers[i];
-      let d = Math.hypot(nx - c.x, ny - c.y) - c.r;
-      if (d < minDist) { minDist = d; closest = {x: c.x, y: c.y}; }
-  }
-  return { push: true, cx: closest.x, cy: closest.y };
+
+    if (survivalState === 'gate_open' && survivalActiveGate !== -1) {
+        let c = survivalChambers[survivalActiveGate];
+        let inGate = false;
+        if (c.dir === 'top' && nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > c.y && ny < CY) inGate = true;
+        if (c.dir === 'bot' && nx > CX - GATE_WIDTH/2 && nx < CX + GATE_WIDTH/2 && ny > CY && ny < c.y) inGate = true;
+        if (c.dir === 'left' && ny > CY - GATE_WIDTH/2 && ny < CY + GATE_WIDTH/2 && nx > c.x && nx < CX) inGate = true;
+        if (c.dir === 'right' && ny > CY - GATE_WIDTH/2 && ny < CY + GATE_WIDTH/2 && nx > CX && nx < c.x) inGate = true;
+
+        if (inGate || Math.hypot(nx - c.x, ny - c.y) < c.r - rad) return { push: false };
+    }
+
+    if (distMain <= rMain - rad) return { push: false };
+    return { push: true, cx: CX, cy: CY };
 }
 function getSafeArenaPush(nx, ny, rad, snake) {
-  let distMain = Math.hypot(nx - CX, ny - CY);
-  let rMain = current_TR_RADIUS * 0.89;
+  let distMain = Math.hypot(nx - CX, ny - CY), rMain = current_TR_RADIUS * 0.89;
   if (scState === 'idle') {
       if (distMain <= rMain - rad) return { push: false };
       return { push: true, cx: CX, cy: CY };
@@ -1425,19 +1200,12 @@ function getSafeArenaPush(nx, ny, rad, snake) {
       if (c.occupiedBy && c.occupiedBy !== snake) continue;
       let distC = Math.hypot(nx - c.x, ny - c.y);
       if (distC <= c.r - rad) return { push: false }; 
-      let dx = Math.cos(c.angle);
-      let dy = Math.sin(c.angle);
-      let vx = nx - CX;
-      let vy = ny - CY;
-      let proj = vx * dx + vy * dy;
-      let perpDist = Math.abs(vx * -dy + vy * dx);
-      if (proj > rMain - rad && proj <= c.dist && perpDist <= (c.pathWidth/2) - rad) {
-          return { push: false };
-      }
+      let dx = Math.cos(c.angle), dy = Math.sin(c.angle), vx = nx - CX, vy = ny - CY;
+      let proj = vx * dx + vy * dy, perpDist = Math.abs(vx * -dy + vy * dx);
+      if (proj > rMain - rad && proj <= c.dist && perpDist <= (c.pathWidth/2) - rad) return { push: false };
   }
   if (distMain <= rMain - rad) return { push: false };
-  let closest = {x: CX, y: CY};
-  let minDist = distMain - rMain;
+  let closest = {x: CX, y: CY}, minDist = distMain - rMain;
   for (let i=0; i<scChambers.length; i++) {
       let c = scChambers[i];
       if (c.occupiedBy && c.occupiedBy !== snake) continue;
@@ -1446,35 +1214,28 @@ function getSafeArenaPush(nx, ny, rad, snake) {
   }
   return { push: true, cx: closest.x, cy: closest.y };
 }
-const TR_INIT_LENGTH=50;
-const TR_FOOD_LIFETIME=2000;
-const TR_FOOD_AHEAD_DIST=80;
+
+const TR_INIT_LENGTH=50, TR_FOOD_LIFETIME=2000, TR_FOOD_AHEAD_DIST=80;
 const TR_DIFF={
   easy:{reactionMs:900,decisionInterval:70,goodFoodChance:0.45,wrongFoodChance:0.35,turnSpeed:0.045,redEffect:-3,greenEffect:3},
   medium:{reactionMs:450,decisionInterval:30,goodFoodChance:0.72,wrongFoodChance:0.18,turnSpeed:0.07,redEffect:-2,greenEffect:4},
   hard:{reactionMs:120,decisionInterval:8,goodFoodChance:0.95,wrongFoodChance:0.04,turnSpeed:0.07,redEffect:-1,greenEffect:5}
 };
-const trCam = { x: 0, y: 0 };
-const TR_CAM_LERP = 0.08;
+const trCam = { x: 0, y: 0 }, TR_CAM_LERP = 0.08;
+
 class TRSnake {
   constructor(cfg,x,y,angle,isBot){
-    this.x=x; this.y=y; this.angle=angle; this.isBot=isBot;
-    this.speed=4.3; 
-    this.turnSpeed=cfg.turnSpeed||0.07;
+    this.x=x; this.y=y; this.angle=angle; this.isBot=isBot; this.speed=4.3; this.turnSpeed=cfg.turnSpeed||0.07;
     this.color=isBot?'#f0a':'#0ff'; this.glow=isBot?'#f04':'#0af';
-    this.length=TR_INIT_LENGTH; this.segments=[];
-    this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true; this.foodEaten=0;
-    this.lastGrowthTime=0;
-    for(let i=0;i<TR_INIT_LENGTH;i++)
-      this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
+    this.length=TR_INIT_LENGTH; this.segments=[]; this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true; this.foodEaten=0; this.lastGrowthTime=0;
+    for(let i=0;i<TR_INIT_LENGTH;i++) this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
   turn(dir){ this.angle+=dir*(this.turnSpeed||0.07); }
   setLength(n){
     this.length=Math.max(1,n);
     while(this.segments.length>this.length) this.segments.pop();
     while(this.segments.length<this.length){
-      const last=this.segments[this.segments.length-1];
-      const prev=this.segments[this.segments.length-2]||last;
+      const last=this.segments[this.segments.length-1], prev=this.segments[this.segments.length-2]||last;
       this.segments.push({x:last.x+(last.x-prev.x),y:last.y+(last.y-prev.y)});
     }
   }
@@ -1483,15 +1244,13 @@ class TRSnake {
     if(this.hitCooldown>0) this.hitCooldown--;
     let spd=this.speed;
     if(this.wallSlowTimer>0){ spd*=0.4; this.wallSlowTimer--; }
-    let nx=this.x+Math.cos(this.angle)*spd;
-    let ny=this.y+Math.sin(this.angle)*spd;
+    let nx=this.x+Math.cos(this.angle)*spd, ny=this.y+Math.sin(this.angle)*spd;
     if (trVariant === 'gate') {
       let pushRes = getGateArenaPush(nx, ny, SEGMENT_SIZE, this);
       if (pushRes.push) {
           let pushAngle = Math.atan2(pushRes.cy - ny, pushRes.cx - nx);
           this.angle = pushAngle + (Math.random()-.5)*0.4;
-          nx = this.x + Math.cos(this.angle)*spd;
-          ny = this.y + Math.sin(this.angle)*spd;
+          nx = this.x + Math.cos(this.angle)*spd; ny = this.y + Math.sin(this.angle)*spd;
           this.wallSlowTimer = 25;
       }
     } else if (trVariant === 'survival') {
@@ -1499,8 +1258,7 @@ class TRSnake {
       if (pushRes.push) {
           let pushAngle = Math.atan2(pushRes.cy - ny, pushRes.cx - nx);
           this.angle = pushAngle + (Math.random()-.5)*0.4;
-          nx = this.x + Math.cos(this.angle)*spd;
-          ny = this.y + Math.sin(this.angle)*spd;
+          nx = this.x + Math.cos(this.angle)*spd; ny = this.y + Math.sin(this.angle)*spd;
           this.wallSlowTimer = 25;
       }
     } else if (trVariant === 'safe') {
@@ -1508,8 +1266,7 @@ class TRSnake {
       if (pushRes.push) {
           let pushAngle = Math.atan2(pushRes.cy - ny, pushRes.cx - nx);
           this.angle = pushAngle + (Math.random()-.5)*0.4;
-          nx = this.x + Math.cos(this.angle)*spd;
-          ny = this.y + Math.sin(this.angle)*spd;
+          nx = this.x + Math.cos(this.angle)*spd; ny = this.y + Math.sin(this.angle)*spd;
           this.wallSlowTimer = 25;
       }
     } else if (trVariant === 'classic') {
@@ -1525,15 +1282,14 @@ class TRSnake {
     this.segments.unshift({x:this.x,y:this.y});
     while(this.segments.length>this.length) this.segments.pop();
   }
-  draw(){
-    renderSnakeBody(ctx, this);
-  }
+  draw(){ renderSnakeBody(ctx, this); }
 }
+
 class TRFood {
   constructor(x,y,type){ this.x=x; this.y=y; this.type=type; this.r=10; this.spawnTime=Date.now(); this.alive=true; }
   draw(remaining){
     ctx.save();
-    const color=this.type==='red'?'#f44':'#4f4'; const glow=this.type==='red'?'#f00':'#0f0';
+    const color=this.type==='red'?'#f44':'#4f4', glow=this.type==='red'?'#f00':'#0f0';
     ctx.shadowColor=glow; ctx.shadowBlur=16;
     ctx.beginPath(); ctx.arc(this.x,this.y,this.r+4*(1-remaining),0,Math.PI*2);
     ctx.strokeStyle=color; ctx.lineWidth=2; ctx.globalAlpha=0.4+remaining*0.4; ctx.stroke();
@@ -1544,42 +1300,33 @@ class TRFood {
     ctx.restore();
   }
 }
+
 let trP1Type = 'small', trP2Type = 'big';
 function setupTRScreen(){
   document.getElementById('tr-select-title').textContent = trVariant === 'gate' ? "GATE ARENA" : (trVariant === 'survival' ? "SURVIVAL CHAMBERS" : (trVariant === 'safe' ? "SAFE CHAMBERS" : "CLASSIC TAIL REMOVAL"));
-  document.getElementById('tr-select-type').classList.remove('hidden');
-  document.getElementById('tr-select-details').classList.add('hidden');
+  document.getElementById('tr-select-type').classList.remove('hidden'); document.getElementById('tr-select-details').classList.add('hidden');
   trP1Type=null;
-  document.getElementById('tr-card-small').classList.remove('selected');
-  document.getElementById('tr-card-big').classList.remove('selected');
+  document.getElementById('tr-card-small').classList.remove('selected'); document.getElementById('tr-card-big').classList.remove('selected');
   document.getElementById('tr-btn-start').classList.add('hidden');
 }
-function setupTRGameMode(m){
-  trGameMode=m;
-  document.getElementById('tr-diff-section').classList.toggle('hidden',m!=='bot');
-}
+function setupTRGameMode(m){ trGameMode=m; document.getElementById('tr-diff-section').classList.toggle('hidden',m!=='bot'); }
 function trSetDiff(d,btn){ trDiff=d; document.querySelectorAll('#screen-tr-select .diff-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
 function trSelectSnake(t){
-  trP1Type = t;
-  trP2Type = t === 'small' ? 'big' : 'small';
+  trP1Type = t; trP2Type = t === 'small' ? 'big' : 'small';
   document.getElementById('tr-card-small').classList.toggle('selected',t==='small');
   document.getElementById('tr-card-big').classList.toggle('selected',t==='big');
   document.getElementById('tr-btn-start').classList.remove('hidden');
 }
-let trGameMode='bot', trSnake1=null, trSnake2=null, trFoods=[], trActive=false;
-let trStartTime=0, trAnimFrame=null, trDiff='easy';
+
+let trGameMode='bot', trSnake1=null, trSnake2=null, trFoods=[], trActive=false, trStartTime=0, trAnimFrame=null, trDiff='easy';
 let trInputDir={x:0,y:0}, trInputDir2={x:0,y:0};
 const trBot={ actionFrame:0, lastDecisionFrame:0, targetFood:null, reactionDelay:0, lastFoodSeen:null };
+
 function startTailRemoval(){
-  showScreen('screen-tr-game');
-  stopMenuMusic();
+  showScreen('screen-tr-game'); stopMenuMusic();
   document.getElementById('btn-pause').removeProperty ? document.getElementById('btn-pause').classList.remove('hidden') : document.getElementById('btn-pause').className = "btn";
   current_TR_RADIUS = (trVariant === 'gate' || trVariant === 'survival') ? TR_RADIUS * 1.25 : (trVariant === 'safe' ? TR_RADIUS * 1.20 : TR_RADIUS);
-  if (trVariant === 'survival') {
-      document.getElementById('food-timer-wrap').classList.add('hidden');
-  } else {
-      document.getElementById('food-timer-wrap').classList.remove('hidden');
-  }
+  document.getElementById('food-timer-wrap').classList.remove('hidden');
   const p1Name = trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
   const p2Name = trGameMode==='local'?(trP2Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN'):(trP2Type==='small'?'🤖 SPECTER BOT':'🤖 LEVIATHAN BOT');
   document.getElementById('tr-p1-name').textContent = trGameMode==='local'?'P1 '+p1Name:p1Name;
@@ -1591,87 +1338,60 @@ function startTailRemoval(){
   trSnake2=new TRSnake({turnSpeed:p2Turn},CX+Math.cos(a2)*r,CY+Math.sin(a2)*r,a1-.3,trGameMode==='bot');
   trSnake1.color=trP1Type==='small'?'#0ff':'#f0a'; trSnake1.glow=trP1Type==='small'?'#0af':'#f04';
   trSnake2.color=trP2Type==='small'?'#0ff':'#f0a'; trSnake2.glow=trP2Type==='small'?'#0af':'#f04';
-  document.getElementById('tr-p1-name').style.color = trSnake1.color;
-  document.getElementById('tr-p2-name').style.color = trSnake2.color;
-  document.getElementById('tr-p1-len').style.color = trSnake1.color;
-  document.getElementById('tr-p2-len').style.color = trSnake2.color;
-  document.getElementById('tr-p1-len').style.textShadow = `0 0 12px ${trSnake1.glow}`;
-  document.getElementById('tr-p2-len').style.textShadow = `0 0 12px ${trSnake2.glow}`;
+  document.getElementById('tr-p1-name').style.color = trSnake1.color; document.getElementById('tr-p2-name').style.color = trSnake2.color;
+  document.getElementById('tr-p1-len').style.color = trSnake1.color; document.getElementById('tr-p2-len').style.color = trSnake2.color;
+  document.getElementById('tr-p1-len').style.textShadow = `0 0 12px ${trSnake1.glow}`; document.getElementById('tr-p2-len').style.textShadow = `0 0 12px ${trSnake2.glow}`;
   trFoods=[]; trActive=true; trStartTime=Date.now();
   trBot.actionFrame=0; trBot.lastDecisionFrame=0; trBot.targetFood=null; trBot.reactionDelay=0; trBot.lastFoodSeen=null;
   particles=[]; initBgParticles();
+
   if (trVariant === 'gate') {
-      let rc = current_TR_RADIUS * 0.45 * 1.15;
-      let pad = 30; 
+      let rc = current_TR_RADIUS * 0.45 * 1.15; let pad = 30; 
       gateChambers = [
           {dir: 'top', x: CX, y: CY - current_TR_RADIUS - pad - rc, r: rc, discovered: false},
           {dir: 'bot', x: CX, y: CY + current_TR_RADIUS + pad + rc, r: rc, discovered: false},
           {dir: 'left', x: CX - current_TR_RADIUS - pad - rc, y: CY, r: rc, discovered: false},
           {dir: 'right', x: CX + current_TR_RADIUS + pad + rc, y: CY, r: rc, discovered: false}
       ];
-      gateState = 'closed';
-      gateTimerEnd = Date.now() + 25000;
+      gateState = 'closed'; gateTimerEnd = Date.now() + 25000;
       let types = ['green', 'green', 'green', 'red'].sort(() => Math.random() - 0.5);
       trChamberFoods = [];
       for(let i=0; i<4; i++) {
           for(let j=0; j<22; j++) {
-              let a = Math.random() * Math.PI * 2;
-              let fr = Math.sqrt(Math.random()) * (rc - 15);
+              let a = Math.random() * Math.PI * 2, fr = Math.sqrt(Math.random()) * (rc - 15);
               let f = new TRFood(gateChambers[i].x + Math.cos(a)*fr, gateChambers[i].y + Math.sin(a)*fr, types[i]);
-              f.chamberIndex = i;
-              f.isChamberFood = true;
-              trChamberFoods.push(f);
+              f.chamberIndex = i; f.isChamberFood = true; trChamberFoods.push(f);
           }
       }
-      spawnTRFood(trSnake1, 'p1');
-      spawnTRFood(trSnake2, 'p2');
+      spawnTRFood(trSnake1, 'p1'); spawnTRFood(trSnake2, 'p2');
   } else if (trVariant === 'survival') {
-      let rc = current_TR_RADIUS * 0.45 * 1.15;
-      let pad = 40; 
+      let rc = current_TR_RADIUS * 0.45 * 1.15; let pad = 40;
       survivalChambers = [
-          {dir: 'top', x: CX, y: CY - current_TR_RADIUS - pad - rc, r: rc, discovered: false},
-          {dir: 'bot', x: CX, y: CY + current_TR_RADIUS + pad + rc, r: rc, discovered: false}
+          {dir: 'top', x: CX, y: CY - current_TR_RADIUS - pad - rc, r: rc},
+          {dir: 'bot', x: CX, y: CY + current_TR_RADIUS + pad + rc, r: rc},
+          {dir: 'left', x: CX - current_TR_RADIUS - pad - rc, y: CY, r: rc},
+          {dir: 'right', x: CX + current_TR_RADIUS + pad + rc, y: CY, r: rc}
       ];
-      survivalChamberFoods = [];
-      let survivalFoodCount = 9; 
-      for(let i=0; i<2; i++) {
-          for(let j=0; j<survivalFoodCount; j++) {
-              let baseAngle = (Math.PI * 2 / survivalFoodCount) * j;
-              let a = baseAngle + (Math.random() * 0.4 - 0.2); 
-              let fr = 10 + Math.random() * (rc - 25);
-              let f = new TRFood(survivalChambers[i].x + Math.cos(a)*fr, survivalChambers[i].y + Math.sin(a)*fr, 'red');
-              f.chamberIndex = i;
-              f.isSurvivalFood = true;
-              f.needsRespawn = false;
-              survivalChamberFoods.push(f);
-          }
-      }
-      spawnTRFood(trSnake1, 'p1');
-      spawnTRFood(trSnake2, 'p2');
-      survivalState = 'closed_initial';
-      survivalTimerEnd = Date.now() + 25000;
+      survivalState = 'normal'; survivalTimerEnd = Date.now() + 15000;
+      survivalActiveGate = -1; survivalOutsideSnake = null; survivalInsideSnake = null; survivalCannons = []; survivalProjectiles = [];
+      spawnTRFood(trSnake1, 'p1'); spawnTRFood(trSnake2, 'p2');
   } else if (trVariant === 'safe') {
-      scState = 'idle';
-      scTimerEnd = Date.now() + 12000;
-      scChambers = [];
+      scState = 'idle'; scTimerEnd = Date.now() + 12000; scChambers = [];
       spawnTRFood(trSnake1,'p1'); spawnTRFood(trSnake2,'p2');
-  } else {
-      spawnTRFood(trSnake1,'p1'); spawnTRFood(trSnake2,'p2');
-  }
-  trCam.x = trSnake1.x;
-  trCam.y = trSnake1.y;
+  } else { spawnTRFood(trSnake1,'p1'); spawnTRFood(trSnake2,'p2'); }
+  trCam.x = trSnake1.x; trCam.y = trSnake1.y;
   const isMobile='ontouchstart' in window;
   document.getElementById('tr-joystick-left').classList.toggle('hidden',!isMobile);
   document.getElementById('tr-joystick-right').classList.toggle('hidden',!(isMobile&&trGameMode==='local'));
   if(isMobile) setupTRJoystick();
   updateTRHud();
-  if(trAnimFrame) cancelAnimationFrame(trAnimFrame);
-  trAnimFrame=null;
+  if(trAnimFrame) cancelAnimationFrame(trAnimFrame); trAnimFrame=null;
   trGameLoop();
 }
+
 function spawnTRFood(snake,owner){
   const ahead=TR_FOOD_AHEAD_DIST+Math.random()*60;
-  let fx=snake.x+Math.cos(snake.angle)*ahead; let fy=snake.y+Math.sin(snake.angle)*ahead;
+  let fx=snake.x+Math.cos(snake.angle)*ahead, fy=snake.y+Math.sin(snake.angle)*ahead;
   const perp=snake.angle+Math.PI/2*(Math.random()<0.5?1:-1);
   fx+=Math.cos(perp)*(Math.random()*40); fy+=Math.sin(perp)*(Math.random()*40);
   const d=Math.hypot(fx-CX,fy-CY);
@@ -1679,15 +1399,13 @@ function spawnTRFood(snake,owner){
   const foodType=Math.random()<0.6?'red':'green';
   const f=new TRFood(fx,fy,foodType); f.owner=owner; trFoods.push(f);
 }
+
 function checkChamberEntry() {
     if (scState !== 'warning' && scState !== 'storm') return;
     [trSnake1, trSnake2].forEach(s => {
         let sHead = s.segments[0];
         scChambers.forEach(c => {
-            let dx = Math.cos(c.angle);
-            let dy = Math.sin(c.angle);
-            let vx = sHead.x - CX;
-            let vy = sHead.y - CY;
+            let dx = Math.cos(c.angle), dy = Math.sin(c.angle), vx = sHead.x - CX, vy = sHead.y - CY;
             let proj = vx * dx + vy * dy;
             if (proj > current_TR_RADIUS * 0.89 + 10) {
                 let angleToNx = Math.atan2(sHead.y - CY, sHead.x - CX);
@@ -1703,65 +1421,46 @@ function checkChamberEntry() {
         });
     });
 }
+
 function trGameLoop(){
   if(!trActive) return;
   if(isPaused){ trAnimFrame=requestAnimationFrame(trGameLoop); return; }
   const now=Date.now();
   updateShake();
+
   if (trVariant === 'gate') {
       if (gateState === 'closed') {
-          if (now >= gateTimerEnd) {
-              gateState = 'open_idle';
-          }
+          if (now >= gateTimerEnd) { gateState = 'open_idle'; }
       } else if (gateState === 'open_idle') {
           let entered = false;
           for (let c of gateChambers) {
-              if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r ||
-                  Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) {
-                  entered = true;
-              }
+              if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r || Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) entered = true;
               if (!c.discovered) {
-                  if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r ||
-                      Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) {
-                      c.discovered = true;
-                  }
+                  if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r || Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) c.discovered = true;
               }
           }
-          if (entered) {
-              gateState = 'open_closing';
-              gateTimerEnd = now + 12000;
-          }
+          if (entered) { gateState = 'open_closing'; gateTimerEnd = now + 12000; }
       } else if (gateState === 'open_closing') {
           for (let c of gateChambers) {
               if (!c.discovered) {
-                  if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r ||
-                      Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) {
-                      c.discovered = true;
-                  }
+                  if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r || Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) c.discovered = true;
               }
           }
           if (now >= gateTimerEnd) {
-              gateState = 'closed';
-              gateTimerEnd = now + 25000;
+              gateState = 'closed'; gateTimerEnd = now + 25000;
               let snakes = [trSnake1, trSnake2];
               snakes.forEach(s => {
                   let needsTeleport = false;
                   for (let seg of s.segments) {
-                      if (Math.hypot(seg.x - CX, seg.y - CY) > current_TR_RADIUS*0.89 - SEGMENT_SIZE) {
-                          needsTeleport = true; break;
-                      }
+                      if (Math.hypot(seg.x - CX, seg.y - CY) > current_TR_RADIUS*0.89 - SEGMENT_SIZE) { needsTeleport = true; break; }
                   }
                   if (needsTeleport) {
-                      let safeR = current_TR_RADIUS * 0.6;
-                      let a = Math.random() * Math.PI * 2;
-                      s.x = CX + Math.cos(a) * safeR;
-                      s.y = CY + Math.sin(a) * safeR;
-                      s.angle = Math.random() * Math.PI * 2;
+                      let safeR = current_TR_RADIUS * 0.6, a = Math.random() * Math.PI * 2;
+                      s.x = CX + Math.cos(a) * safeR; s.y = CY + Math.sin(a) * safeR; s.angle = Math.random() * Math.PI * 2;
                       for(let i=0; i<s.segments.length; i++) {
                           s.segments[i] = { x: s.x - Math.cos(s.angle)*i*SEGMENT_SIZE, y: s.y - Math.sin(s.angle)*i*SEGMENT_SIZE };
                       }
-                      addParticles(s.x, s.y, s.color, 30);
-                      triggerShake();
+                      addParticles(s.x, s.y, s.color, 30); triggerShake();
                   }
               });
               gateChambers.forEach(c => c.discovered = false);
@@ -1769,99 +1468,97 @@ function trGameLoop(){
           }
       }
   } else if (trVariant === 'survival') {
-      if (survivalState === 'closed_initial') {
+      if (survivalState === 'normal') {
           if (now >= survivalTimerEnd) {
-              survivalState = 'open_idle';
+              survivalState = 'gate_open';
+              survivalTimerEnd = now + 7000;
+              survivalActiveGate = Math.floor(Math.random() * 4);
           }
-      } else if (survivalState === 'open_idle' || survivalState === 'open_escape') {
-          if (survivalState === 'open_escape' && now >= survivalTimerEnd) {
-              survivalState = 'open_idle';
+      } else if (survivalState === 'gate_open') {
+          let c = survivalChambers[survivalActiveGate];
+          let enteredSnake = null, otherSnake = null;
+          if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r) { enteredSnake = trSnake1; otherSnake = trSnake2; }
+          else if (Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) { enteredSnake = trSnake2; otherSnake = trSnake1; }
+
+          if (enteredSnake) {
+              survivalOutsideSnake = enteredSnake;
+              survivalInsideSnake = otherSnake;
+              survivalState = 'cannon';
+              survivalTimerEnd = now + 10000;
+              survivalCannons = [{ angle: Math.random() * Math.PI * 2, lastFire: now, emergeProgress: 0, target: otherSnake }];
+              survivalProjectiles = [];
+          } else if (now >= survivalTimerEnd) {
+              survivalState = 'cannon';
+              survivalTimerEnd = now + 10000;
+              survivalActiveGate = -1;
+              survivalOutsideSnake = null;
+              survivalInsideSnake = null;
+              let a1 = Math.random() * Math.PI * 2;
+              let a2 = a1 + Math.PI;
+              survivalCannons = [
+                  { angle: a1, lastFire: now, emergeProgress: 0, target: trSnake1 },
+                  { angle: a2, lastFire: now, emergeProgress: 0, target: trSnake2 }
+              ];
+              survivalProjectiles = [];
           }
-          if (survivalState === 'open_idle') {
-              let entered = false;
-              for (let c of survivalChambers) {
-                  let p1In = Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r;
-                  let p2In = Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r;
-                  if (p1In || p2In) entered = true;
-                  if (!c.discovered && (p1In || p2In)) c.discovered = true;
-              }
-              if (entered) {
-                  survivalState = 'open_closing';
-                  survivalTimerEnd = now + 12000;
-              }
-          }
-      } else if (survivalState === 'open_closing') {
-          for (let c of survivalChambers) {
-              if (!c.discovered) {
-                  if (Math.hypot(trSnake1.x - c.x, trSnake1.y - c.y) < c.r ||
-                      Math.hypot(trSnake2.x - c.x, trSnake2.y - c.y) < c.r) {
-                      c.discovered = true;
+      } else if (survivalState === 'cannon') {
+          if (now >= survivalTimerEnd) {
+              survivalState = 'normal';
+              survivalTimerEnd = now + 15000;
+              survivalActiveGate = -1;
+              if (survivalOutsideSnake) {
+                  let a = Math.random() * Math.PI * 2;
+                  survivalOutsideSnake.x = CX + Math.cos(a) * current_TR_RADIUS * 0.5;
+                  survivalOutsideSnake.y = CY + Math.sin(a) * current_TR_RADIUS * 0.5;
+                  for(let i=0; i<survivalOutsideSnake.segments.length; i++) {
+                      survivalOutsideSnake.segments[i].x = survivalOutsideSnake.x - Math.cos(survivalOutsideSnake.angle)*i*SEGMENT_SIZE;
+                      survivalOutsideSnake.segments[i].y = survivalOutsideSnake.y - Math.sin(survivalOutsideSnake.angle)*i*SEGMENT_SIZE;
                   }
+                  addParticles(survivalOutsideSnake.x, survivalOutsideSnake.y, survivalOutsideSnake.color, 30);
+                  triggerShake();
               }
-          }
-          if (now >= survivalTimerEnd) {
-              survivalState = 'closed_trapped';
-              survivalTimerEnd = now + 12000;
-              let snakes = [trSnake1, trSnake2];
-              snakes.forEach(s => {
-                  let headDistMain = Math.hypot(s.x - CX, s.y - CY);
-                  let isOutsideMain = headDistMain > current_TR_RADIUS*0.89 - SEGMENT_SIZE;
-                  if (isOutsideMain) {
-                      let closestChamber = survivalChambers[0];
-                      if (Math.hypot(s.x - survivalChambers[1].x, s.y - survivalChambers[1].y) < Math.hypot(s.x - survivalChambers[0].x, s.y - survivalChambers[0].y)) {
-                          closestChamber = survivalChambers[1];
-                      }
-                      let fullyInside = true;
-                      for (let seg of s.segments) {
-                          if (Math.hypot(seg.x - closestChamber.x, seg.y - closestChamber.y) > closestChamber.r*0.91 - SEGMENT_SIZE) {
-                              fullyInside = false; break;
+              survivalOutsideSnake = null; survivalInsideSnake = null; survivalCannons = []; survivalProjectiles = [];
+          } else {
+              survivalCannons.forEach(cannon => {
+                  if (cannon.emergeProgress < 1) cannon.emergeProgress += 0.05;
+                  if (now - cannon.lastFire > 800 && cannon.emergeProgress >= 1) {
+                      cannon.lastFire = now;
+                      let cx = CX + Math.cos(cannon.angle) * current_TR_RADIUS * 0.89;
+                      let cy = CY + Math.sin(cannon.angle) * current_TR_RADIUS * 0.89;
+                      let dist = Math.hypot(cannon.target.x - cx, cannon.target.y - cy);
+                      let lead = dist / 6.0;
+                      let tx = cannon.target.x + Math.cos(cannon.target.angle) * cannon.target.speed * lead;
+                      let ty = cannon.target.y + Math.sin(cannon.target.angle) * cannon.target.speed * lead;
+                      let a = Math.atan2(ty - cy, tx - cx);
+                      survivalProjectiles.push({ x: cx, y: cy, vx: Math.cos(a)*6, vy: Math.sin(a)*6, alive: true, target: cannon.target });
+                  }
+              });
+              
+              survivalProjectiles.forEach(p => {
+                  p.x += p.vx; p.y += p.vy;
+                  if (Math.hypot(p.x - CX, p.y - CY) > current_TR_RADIUS * 1.5) p.alive = false;
+                  if (p.alive && p.target) {
+                      for(let i=0; i<p.target.segments.length; i++) {
+                          let s = p.target.segments[i];
+                          if (Math.hypot(p.x - s.x, p.y - s.y) < SEGMENT_SIZE + 6) {
+                              p.alive = false;
+                              p.target.setLength(p.target.length + 4);
+                              addParticles(p.x, p.y, '#0af', 20);
+                              triggerShake();
+                              break;
                           }
-                      }
-                      if (!fullyInside) {
-                          let safeR = closestChamber.r * 0.5;
-                          let a = Math.random() * Math.PI * 2;
-                          s.x = closestChamber.x + Math.cos(a) * safeR;
-                          s.y = closestChamber.y + Math.sin(a) * safeR;
-                          for(let i=0; i<s.segments.length; i++) {
-                              s.segments[i] = { x: s.x - Math.cos(s.angle)*i*SEGMENT_SIZE, y: s.y - Math.sin(s.angle)*i*SEGMENT_SIZE };
-                          }
-                          addParticles(s.x, s.y, s.color, 30);
-                          triggerShake();
                       }
                   }
               });
-              trFoods = [];
-          }
-      } else if (survivalState === 'closed_trapped') {
-          if (now >= survivalTimerEnd) {
-              survivalState = 'open_escape';
-              survivalTimerEnd = now + 25000;
-              survivalChambers.forEach(c => c.discovered = false);
-              survivalChamberFoods.forEach(f => {
-                  if(f.needsRespawn) {
-                      let a = Math.random() * Math.PI * 2;
-                      let fr = 10 + Math.random() * (survivalChambers[f.chamberIndex].r - 25);
-                      f.x = survivalChambers[f.chamberIndex].x + Math.cos(a)*fr;
-                      f.y = survivalChambers[f.chamberIndex].y + Math.sin(a)*fr;
-                      f.alive = true;
-                      f.needsRespawn = false;
-                  }
-              });
-              spawnTRFood(trSnake1, 'p1');
-              spawnTRFood(trSnake2, 'p2');
+              survivalProjectiles = survivalProjectiles.filter(p => p.alive);
           }
       }
   } else if (trVariant === 'safe') {
       if (scState === 'idle') {
           if (now >= scTimerEnd) {
-              scState = 'warning';
-              scTimerEnd = now + 3000;
-              let numChambers = Math.random() < 0.5 ? 1 : 2;
-              scChambers = [];
-              let angle1 = Math.random() * Math.PI * 2;
-              let cr = 87.5; 
-              let pathLen = 60;
-              let r = current_TR_RADIUS * 0.89 + cr + pathLen; 
+              scState = 'warning'; scTimerEnd = now + 3000;
+              let numChambers = Math.random() < 0.5 ? 1 : 2; scChambers = [];
+              let angle1 = Math.random() * Math.PI * 2, cr = 87.5, pathLen = 60, r = current_TR_RADIUS * 0.89 + cr + pathLen; 
               scChambers.push({x: CX + Math.cos(angle1)*r, y: CY + Math.sin(angle1)*r, r: cr, occupiedBy: null, angle: angle1, pathWidth: 80, dist: r});
               if (numChambers === 2) {
                   let angle2 = angle1 + Math.PI + (Math.random() - 0.5) * 1.5;
@@ -1870,39 +1567,24 @@ function trGameLoop(){
           }
       } else if (scState === 'warning') {
           checkChamberEntry();
-          if (now >= scTimerEnd) {
-              scState = 'storm';
-              scTimerEnd = now + 5000;
-              triggerShake();
-          }
+          if (now >= scTimerEnd) { scState = 'storm'; scTimerEnd = now + 5000; triggerShake(); }
       } else if (scState === 'storm') {
           checkChamberEntry();
           [trSnake1, trSnake2].forEach(s => {
               let inChamber = scChambers.some(c => c.occupiedBy === s);
               if (!inChamber) {
                   if (!s.lastGrowthTime) s.lastGrowthTime = now;
-                  if (now - s.lastGrowthTime > 250) { 
-                      s.setLength(s.length + 1);
-                      s.lastGrowthTime = now;
-                  }
+                  if (now - s.lastGrowthTime > 250) { s.setLength(s.length + 1); s.lastGrowthTime = now; }
               }
           });
           if (now >= scTimerEnd) {
-              scState = 'idle';
-              scTimerEnd = now + 12000; 
+              scState = 'idle'; scTimerEnd = now + 12000; 
               scChambers.forEach(c => {
                   if (c.occupiedBy) {
-                      let s = c.occupiedBy;
-                      let safeR = current_TR_RADIUS * 0.5;
-                      let a = Math.random() * Math.PI * 2;
-                      s.x = CX + Math.cos(a) * safeR;
-                      s.y = CY + Math.sin(a) * safeR;
-                      s.angle = Math.random() * Math.PI * 2;
-                      for(let i=0; i<s.segments.length; i++) {
-                          s.segments[i] = { x: s.x - Math.cos(s.angle)*i*SEGMENT_SIZE, y: s.y - Math.sin(s.angle)*i*SEGMENT_SIZE };
-                      }
-                      addParticles(s.x, s.y, s.color, 30);
-                      triggerShake();
+                      let s = c.occupiedBy, safeR = current_TR_RADIUS * 0.5, a = Math.random() * Math.PI * 2;
+                      s.x = CX + Math.cos(a) * safeR; s.y = CY + Math.sin(a) * safeR; s.angle = Math.random() * Math.PI * 2;
+                      for(let i=0; i<s.segments.length; i++) { s.segments[i] = { x: s.x - Math.cos(s.angle)*i*SEGMENT_SIZE, y: s.y - Math.sin(s.angle)*i*SEGMENT_SIZE }; }
+                      addParticles(s.x, s.y, s.color, 30); triggerShake();
                   }
               });
               scChambers = [];
@@ -1910,85 +1592,62 @@ function trGameLoop(){
           }
       }
   }
-  trCam.x += (trSnake1.x - trCam.x) * TR_CAM_LERP;
-  trCam.y += (trSnake1.y - trCam.y) * TR_CAM_LERP;
-  const camOffX = CX - trCam.x;
-  const camOffY = CY - trCam.y;
-  ctx.save(); ctx.translate(shakeX,shakeY);
-  ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
-  ctx.save();
-  ctx.translate(camOffX, camOffY);
-  drawArena(); trHandleInput();
+
+  trCam.x += (trSnake1.x - trCam.x) * TR_CAM_LERP; trCam.y += (trSnake1.y - trCam.y) * TR_CAM_LERP;
+  const camOffX = CX - trCam.x, camOffY = CY - trCam.y;
+  ctx.save(); ctx.translate(shakeX,shakeY); ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
+  ctx.save(); ctx.translate(camOffX, camOffY); drawArena(); trHandleInput();
   if(trGameMode==='bot') trBotThink(now);
   trSnake1.update(); trSnake2.update();
   trCheckFoodCollision(now); trManageFoods(now);
   updateParticles(); trSnake1.draw(); trSnake2.draw();
   trFoods.forEach(f=>{ if(f.alive){ const rem=Math.max(0,1-(now-f.spawnTime)/TR_FOOD_LIFETIME); f.draw(rem); }});
   if (trVariant === 'gate') {
-      trChamberFoods.forEach(f => {
-          if(f.alive && gateChambers[f.chamberIndex].discovered) {
-              f.draw(1);
-          }
-      });
-  } else if (trVariant === 'survival') {
-      survivalChamberFoods.forEach(f => {
-          if(f.alive && survivalChambers[f.chamberIndex].discovered) {
-              f.draw(1);
-          }
-      });
+      trChamberFoods.forEach(f => { if(f.alive && gateChambers[f.chamberIndex].discovered) f.draw(1); });
   }
   drawParticles(); 
-  if (trVariant === 'gate') {
+
+  if (trVariant === 'survival' && survivalProjectiles && survivalProjectiles.length > 0) {
       ctx.save();
-      ctx.font = 'bold 20px Segoe UI';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
+      survivalProjectiles.forEach(p => {
+          ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI*2);
+          ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0af'; ctx.shadowBlur = 15; ctx.fill();
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx*3, p.y - p.vy*3);
+          ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)'; ctx.lineWidth = 4; ctx.stroke();
+      });
+      ctx.restore();
+  }
+
+  if (trVariant === 'gate') {
+      ctx.save(); ctx.font = 'bold 20px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       let remain = Math.max(0, Math.ceil((gateTimerEnd - Date.now()) / 1000));
       if (gateState === 'closed') {
-          ctx.fillStyle = '#0ff';
-          ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
+          ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
           ctx.fillText(`GATES OPEN IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       } else if (gateState === 'open_closing') {
-          ctx.fillStyle = '#f04';
-          ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
-          if (remain % 2 === 0 || remain < 5) {
-              ctx.fillText(`GATES CLOSE IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
-          }
+          ctx.fillStyle = '#f04'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
+          if (remain % 2 === 0 || remain < 5) ctx.fillText(`GATES CLOSE IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       } else if (gateState === 'open_idle') {
-          ctx.fillStyle = '#0f8';
-          ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
+          ctx.fillStyle = '#0f8'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
           ctx.fillText(`GATES OPEN - ENTER A CHAMBER`, CX, CY - current_TR_RADIUS + 80);
       }
       ctx.restore();
   } else if (trVariant === 'survival') {
-      ctx.save();
-      ctx.font = 'bold 20px Segoe UI';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      let remain = Math.max(0, Math.ceil((survivalTimerEnd - Date.now()) / 1000));
-      if (survivalState === 'closed_initial') {
+      ctx.save(); ctx.font = 'bold 20px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      let remain = Math.max(0, Math.ceil((survivalTimerEnd - now) / 1000));
+      if (survivalState === 'normal') {
           ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
-          ctx.fillText(`GATES OPEN IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
-      } else if (survivalState === 'open_closing') {
-          ctx.fillStyle = '#f04'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
-          if (remain % 2 === 0 || remain < 5) ctx.fillText(`GATES CLOSE IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
-      } else if (survivalState === 'closed_trapped') {
-          ctx.fillStyle = '#f04'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
-          ctx.fillText(`TRAPPED: ${remain}`, CX, CY - current_TR_RADIUS + 80);
-      } else if (survivalState === 'open_escape') {
+          ctx.fillText(`GATE OPENS IN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
+      } else if (survivalState === 'gate_open') {
           ctx.fillStyle = '#0f8'; ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
-          ctx.fillText(`ESCAPE PHASE: ${remain}`, CX, CY - current_TR_RADIUS + 80);
-      } else if (survivalState === 'open_idle') {
-          ctx.fillStyle = '#0f8';
-          ctx.shadowColor = '#0f0'; ctx.shadowBlur = 10;
-          ctx.fillText(`GATES OPEN - CHAMBERS ACTIVE`, CX, CY - current_TR_RADIUS + 80);
+          if (remain % 2 === 0 || remain < 3) ctx.fillText(`GATE OPEN: ${remain}`, CX, CY - current_TR_RADIUS + 80);
+      } else if (survivalState === 'cannon') {
+          ctx.fillStyle = '#f04'; ctx.shadowColor = '#f00'; ctx.shadowBlur = 10;
+          ctx.fillText(`CANNON ATTACK: ${remain}`, CX, CY - current_TR_RADIUS + 80);
       }
       ctx.restore();
   } else if (trVariant === 'safe') {
-      ctx.save();
-      ctx.font = 'bold 20px Segoe UI';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
+      ctx.save(); ctx.font = 'bold 20px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       let remain = Math.max(0, Math.ceil((scTimerEnd - Date.now()) / 1000));
       if (scState === 'idle') {
           ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0af'; ctx.shadowBlur = 10;
@@ -2004,79 +1663,71 @@ function trGameLoop(){
   }
   ctx.restore(); 
   ctx.restore(); 
-  if (trVariant === 'survival') {
-      document.getElementById('food-timer-wrap').classList.add('hidden');
+
+  const pf=trFoods.find(f=>f.owner==='p1'&&f.alive);
+  if(pf){
+      document.getElementById('food-timer-wrap').classList.remove('hidden');
+      const rem=Math.max(0,1-(now-pf.spawnTime)/TR_FOOD_LIFETIME), circ=2*Math.PI*18;
+      document.getElementById('food-timer-arc').setAttribute('stroke-dashoffset',(1-rem)*circ);
+      document.getElementById('food-timer-arc').setAttribute('stroke',pf.type==='red'?'#f44':'#4f4');
+      document.getElementById('food-timer-label').textContent=(rem*2).toFixed(1)+'s';
+      document.getElementById('food-timer-label').style.color=pf.type==='red'?'#f44':'#4f4';
   } else {
-      const pf=trFoods.find(f=>f.owner==='p1'&&f.alive);
-      if(pf){
-          document.getElementById('food-timer-wrap').classList.remove('hidden');
-          const rem=Math.max(0,1-(now-pf.spawnTime)/TR_FOOD_LIFETIME);
-          const circ=2*Math.PI*18;
-          document.getElementById('food-timer-arc').setAttribute('stroke-dashoffset',(1-rem)*circ);
-          document.getElementById('food-timer-arc').setAttribute('stroke',pf.type==='red'?'#f44':'#4f4');
-          document.getElementById('food-timer-label').textContent=(rem*2).toFixed(1)+'s';
-          document.getElementById('food-timer-label').style.color=pf.type==='red'?'#f44':'#4f4';
-      } else {
-          document.getElementById('food-timer-wrap').classList.add('hidden');
-      }
+      document.getElementById('food-timer-wrap').classList.add('hidden');
   }
   updateTRHud();
   if(trSnake1.length<=1||trSnake2.length<=1){ endTRGame(); return; }
   trAnimFrame=requestAnimationFrame(trGameLoop);
 }
+
 function trHandleInput(){
-  if(keys['a']||keys['A']) trSnake1.turn(-1);
-  if(keys['d']||keys['D']) trSnake1.turn(1);
-  if(keys['w']||keys['W']) trSnake1.speed = 6.0;
-  else if(keys['s']||keys['S']) trSnake1.speed = 3.0;
-  else trSnake1.speed = 4.3;
+  if(keys['a']||keys['A']) trSnake1.turn(-1); if(keys['d']||keys['D']) trSnake1.turn(1);
+  if(keys['w']||keys['W']) trSnake1.speed = 6.0; else if(keys['s']||keys['S']) trSnake1.speed = 3.0; else trSnake1.speed = 4.3;
   if(trInputDir.x!==0||trInputDir.y!==0){
-    const ta=Math.atan2(trInputDir.y,trInputDir.x);
-    let da=ta-trSnake1.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    const ta=Math.atan2(trInputDir.y,trInputDir.x); let da=ta-trSnake1.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     trSnake1.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
   }
   if(trGameMode==='local'){
-    if(keys['ArrowLeft']) trSnake2.turn(-1);
-    if(keys['ArrowRight']) trSnake2.turn(1);
-    if(keys['ArrowUp']) trSnake2.speed = 6.0;
-    else if(keys['ArrowDown']) trSnake2.speed = 3.0;
-    else trSnake2.speed = 4.3;
+    if(keys['ArrowLeft']) trSnake2.turn(-1); if(keys['ArrowRight']) trSnake2.turn(1);
+    if(keys['ArrowUp']) trSnake2.speed = 6.0; else if(keys['ArrowDown']) trSnake2.speed = 3.0; else trSnake2.speed = 4.3;
     if(trInputDir2.x!==0||trInputDir2.y!==0){
-      const ta=Math.atan2(trInputDir2.y,trInputDir2.x);
-      let da=ta-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+      const ta=Math.atan2(trInputDir2.y,trInputDir2.x); let da=ta-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
       trSnake2.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
     }
   }
 }
+
 function trBotThink(now){
   const dc=TR_DIFF[trDiff]; trBot.actionFrame++;
-  const head=trSnake2.segments[0];
-  const wallDist=current_TR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
+  const head=trSnake2.segments[0], wallDist=current_TR_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
+
   if (trVariant === 'safe' && (scState === 'warning' || scState === 'storm')) {
       let myChamber = scChambers.find(c => c.occupiedBy === trSnake2);
       if (!myChamber) myChamber = scChambers.find(c => !c.occupiedBy);
       if (myChamber) {
           let d = Math.hypot(head.x - myChamber.x, head.y - myChamber.y);
-          if (d < myChamber.r * 0.5) {
-              trSnake2.turn(1.0); 
-              return;
-          }
-          let distMain = Math.hypot(head.x - CX, head.y - CY);
-          let targetX = myChamber.x;
-          let targetY = myChamber.y;
+          if (d < myChamber.r * 0.5) { trSnake2.turn(1.0); return; }
+          let distMain = Math.hypot(head.x - CX, head.y - CY), targetX = myChamber.x, targetY = myChamber.y;
           if (distMain < current_TR_RADIUS * 0.8) {
               targetX = CX + Math.cos(myChamber.angle) * current_TR_RADIUS * 0.89;
               targetY = CY + Math.sin(myChamber.angle) * current_TR_RADIUS * 0.89;
           }
           const ca=Math.atan2(targetY-head.y,targetX-head.x);
           let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-          trSnake2.turn(Math.sign(da)*1.0);
-          return;
+          trSnake2.turn(Math.sign(da)*1.0); return;
       }
   }
-  let botFood=null, nd=Infinity;
-  let botFoods = [...trFoods];
-  if (trVariant === 'gate' && (gateState === 'open_idle' || gateState === 'open_closing')) {
+
+  let botFood=null, nd=Infinity, botFoods = [...trFoods];
+  
+  if (trVariant === 'survival') {
+      if (survivalState === 'cannon' && survivalOutsideSnake === trSnake2) { botFoods = []; }
+      else if (survivalState === 'gate_open' && survivalActiveGate !== -1) {
+          let c = survivalChambers[survivalActiveGate];
+          botFood = {x: c.x, y: c.y, r: c.r, alive: true, type: 'green'};
+          nd = 0; botFoods = [];
+      }
+  } else if (trVariant === 'gate' && (gateState === 'open_idle' || gateState === 'open_closing')) {
       trChamberFoods.forEach(cf => {
           if (!cf.alive) return;
           if (cf.type === 'green' && gateChambers[cf.chamberIndex].discovered) {
@@ -2085,48 +1736,22 @@ function trBotThink(now){
               botFoods.push(cf);
           } else {
               let inChamber = Math.hypot(trSnake2.x - gateChambers[cf.chamberIndex].x, trSnake2.y - gateChambers[cf.chamberIndex].y) < gateChambers[cf.chamberIndex].r;
-              if (inChamber || Math.random() < 0.005) {
-                  botFoods.push(cf);
-              }
+              if (inChamber || Math.random() < 0.005) botFoods.push(cf);
           }
       });
-  } else if (trVariant === 'survival') {
-      let botInChamber = -1;
-      for(let i=0; i<2; i++) {
-          if (Math.hypot(head.x - survivalChambers[i].x, head.y - survivalChambers[i].y) < survivalChambers[i].r) {
-              botInChamber = i;
-          }
-      }
-      if (survivalState === 'closed_trapped') {
-          if (botInChamber !== -1) {
-              survivalChamberFoods.forEach(cf => {
-                  if (cf.alive && cf.chamberIndex === botInChamber) {
-                      botFoods.push(cf);
-                  }
-              });
-          }
-      } else {
-          survivalChamberFoods.forEach(cf => {
-              if (cf.alive && survivalChambers[cf.chamberIndex].discovered) {
-                  botFoods.push(cf);
-              } else if (cf.alive) {
-                  if (Math.random() < 0.002) botFoods.push(cf);
-              }
-          });
-      }
   }
+  
   botFoods.forEach(f=>{ if(f.alive){ const d=Math.hypot(head.x-f.x,head.y-f.y); if(d<nd){nd=d;botFood=f;} }});
   if(botFood&&botFood!==trBot.lastFoodSeen){ trBot.lastFoodSeen=botFood; trBot.reactionDelay=now+dc.reactionMs; trBot.targetFood=null; }
   if(botFood&&now>=trBot.reactionDelay){
-    if(trBot.targetFood===null){
-      trBot.targetFood=(botFood.type==='red'?Math.random()<dc.goodFoodChance:Math.random()<dc.wrongFoodChance)?botFood:null;
-    }
+    if(trBot.targetFood===null){ trBot.targetFood=(botFood.type==='red'?Math.random()<dc.goodFoodChance:Math.random()<dc.wrongFoodChance)?botFood:null; }
   }
   const di=dc.decisionInterval;
   if(trBot.actionFrame-trBot.lastDecisionFrame<di){ trBotExecuteMove(botFood,wallDist,dc); return; }
   trBot.lastDecisionFrame=trBot.actionFrame;
   if(botFood) trBot.targetFood=(botFood.type==='red'?Math.random()<dc.goodFoodChance:Math.random()<dc.wrongFoodChance)?botFood:null;
 }
+
 function trBotExecuteMove(botFood,wallDist,dc){
   const head=trSnake2.segments[0];
   if(trVariant === 'classic' && wallDist<current_TR_RADIUS*0.18){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; trSnake2.turn(Math.sign(da)*1.0); return; }
@@ -2134,38 +1759,31 @@ function trBotExecuteMove(botFood,wallDist,dc){
     const distToFood = Math.hypot(trBot.targetFood.x - head.x, trBot.targetFood.y - head.y);
     const a=Math.atan2(trBot.targetFood.y-head.y,trBot.targetFood.x-head.x);
     let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    if (distToFood < 50 && Math.abs(da) > 1.2) {
-        trSnake2.turn(-Math.sign(da) * 0.8);
-        return;
-    }
+    if (distToFood < 50 && Math.abs(da) > 1.2) { trSnake2.turn(-Math.sign(da) * 0.8); return; }
     const noise = trDiff==='hard'?0.0:trDiff==='medium'?0.05:0.2; 
     trSnake2.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(1.2,Math.abs(da)*1.5));
   } else if(botFood&&botFood.alive){
     const distToFood = Math.hypot(botFood.x - head.x, botFood.y - head.y);
     const awayA=Math.atan2(head.y-botFood.y,head.x-botFood.x);
     let da=awayA-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    if (distToFood < 50 && Math.abs(da) > 1.2) {
-        trSnake2.turn(-Math.sign(da) * 0.8);
-        return;
-    }
+    if (distToFood < 50 && Math.abs(da) > 1.2) { trSnake2.turn(-Math.sign(da) * 0.8); return; }
     trSnake2.turn(Math.sign(da)*0.7);
   } else {
     const a=Math.atan2(CY-head.y,CX-head.x); let da=a-trSnake2.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     if(Math.random()<0.4) trSnake2.turn(Math.sign(da)*0.5);
   }
 }
+
 function trCheckFoodCollision(now){
   const dc=TR_DIFF[trDiff];
   trFoods.forEach(f=>{
     if(!f.alive) return;
-    const head1=trSnake1.segments[0];
-    const head2=trSnake2.segments[0];
+    const head1=trSnake1.segments[0], head2=trSnake2.segments[0];
     let eater = null;
     if(Math.hypot(head1.x-f.x,head1.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake1;
     else if(Math.hypot(head2.x-f.x,head2.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake2;
     if(eater){
-      f.alive=false;
-      let delta;
+      f.alive=false; let delta;
       if(eater===trSnake1) delta=f.type==='red'?-2:4;
       else delta=trGameMode==='local'?(f.type==='red'?-2:4):(f.type==='red'?dc.redEffect:dc.greenEffect);
       eater.setLength(eater.length+delta); eater.foodEaten++;
@@ -2176,50 +1794,18 @@ function trCheckFoodCollision(now){
   if (trVariant === 'gate') {
       trChamberFoods.forEach(f => {
           if(!f.alive) return;
-          const head1=trSnake1.segments[0];
-          const head2=trSnake2.segments[0];
+          const head1=trSnake1.segments[0], head2=trSnake2.segments[0];
           let eater = null;
           if(Math.hypot(head1.x-f.x,head1.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake1;
           else if(Math.hypot(head2.x-f.x,head2.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake2;
           if(eater){
-              f.alive=false;
-              let delta;
+              f.alive=false; let delta;
               if(eater===trSnake1) delta=f.type==='red'?-2:4;
               else delta=trGameMode==='local'?(f.type==='red'?-2:4):(f.type==='red'?dc.redEffect:dc.greenEffect);
               eater.setLength(eater.length+delta); eater.foodEaten++;
               addParticles(f.x,f.y,f.type==='red'?'#f44':'#4f4',16); triggerShake();
-              let c = gateChambers[f.chamberIndex];
-              let a = Math.random() * Math.PI * 2;
-              let fr = Math.sqrt(Math.random()) * (c.r - 15);
-              f.x = c.x + Math.cos(a)*fr;
-              f.y = c.y + Math.sin(a)*fr;
-              f.alive = true;
-          }
-      });
-  } else if (trVariant === 'survival') {
-      survivalChamberFoods.forEach(f => {
-          if(!f.alive) return;
-          const head1=trSnake1.segments[0];
-          const head2=trSnake2.segments[0];
-          let eater = null;
-          if(Math.hypot(head1.x-f.x,head1.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake1;
-          else if(Math.hypot(head2.x-f.x,head2.y-f.y)<SEGMENT_SIZE+f.r) eater = trSnake2;
-          if(eater){
-              f.alive=false;
-              let delta = -2; 
-              eater.setLength(eater.length+delta); eater.foodEaten++;
-              addParticles(f.x,f.y,'#f44',16); triggerShake();
-              setTimeout(() => {
-                  if (trActive && survivalState !== 'closed_trapped') {
-                      let a = Math.random() * Math.PI * 2;
-                      let fr = 10 + Math.random() * (survivalChambers[f.chamberIndex].r - 25);
-                      f.x = survivalChambers[f.chamberIndex].x + Math.cos(a)*fr;
-                      f.y = survivalChambers[f.chamberIndex].y + Math.sin(a)*fr;
-                      f.alive = true;
-                  } else if (trActive) {
-                      f.needsRespawn = true;
-                  }
-              }, 1500);
+              let c = gateChambers[f.chamberIndex], a = Math.random() * Math.PI * 2, fr = Math.sqrt(Math.random()) * (c.r - 15);
+              f.x = c.x + Math.cos(a)*fr; f.y = c.y + Math.sin(a)*fr; f.alive = true;
           }
       });
   }
@@ -2237,756 +1823,409 @@ function updateTRHud(){
     const el=document.getElementById(id); if(!el) return; el.innerHTML='';
     const show=Math.min(n,20);
     for(let i=0;i<show;i++){ 
-        const d=document.createElement('div'); 
-        d.className='tr-seg'; 
-        d.style.background=color;
-        d.style.boxShadow=`0 0 4px ${glow}`;
-        el.appendChild(d); 
+        const d=document.createElement('div'); d.className='tr-seg'; 
+        d.style.background=color; d.style.boxShadow=`0 0 4px ${glow}`; el.appendChild(d); 
     }
   };
   renderPips('tr-p1-segs',trSnake1?trSnake1.length:TR_INIT_LENGTH, trSnake1?trSnake1.color:'#0ff', trSnake1?trSnake1.glow:'#0af');
   renderPips('tr-p2-segs',trSnake2?trSnake2.length:TR_INIT_LENGTH, trSnake2?trSnake2.color:'#f0a', trSnake2?trSnake2.glow:'#f04');
 }
 function endTRGame(){
-  document.getElementById('btn-pause').classList.add('hidden');
-  cancelAnimationFrame(trAnimFrame); trAnimFrame=null; trActive=false;
+  document.getElementById('btn-pause').classList.add('hidden'); cancelAnimationFrame(trAnimFrame); trAnimFrame=null; trActive=false;
   const p1Len=trSnake1.length, p2Len=trSnake2.length;
   let playerWins;
-  if(p1Len<=1&&p2Len>1) playerWins=true;
-  else if(p2Len<=1&&p1Len>1) playerWins=false;
-  else playerWins=p1Len<=p2Len;
+  if(p1Len<=1&&p2Len>1) playerWins=true; else if(p2Len<=1&&p1Len>1) playerWins=false; else playerWins=p1Len<=p2Len;
   const elapsed=Math.round((Date.now()-trStartTime)/1000);
-  const p1N=trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
-  const p2N=trP2Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
-  const bName=trP2Type==='small'?'SPECTER BOT':'LEVIATHAN BOT';
+  const p1N=trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN', p2N=trP2Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN', bName=trP2Type==='small'?'SPECTER BOT':'LEVIATHAN BOT';
   let winnerLabel;
-  if(trGameMode==='bot') winnerLabel=playerWins?p1N+' WINS!':'🤖 '+bName+' WINS!';
-  else winnerLabel=playerWins?'P1 '+p1N+' WINS!':'P2 '+p2N+' WINS!';
+  if(trGameMode==='bot') winnerLabel=playerWins?p1N+' WINS!':'🤖 '+bName+' WINS!'; else winnerLabel=playerWins?'P1 '+p1N+' WINS!':'P2 '+p2N+' WINS!';
   const p2StatLabel=trGameMode==='bot'?'Bot Final Length':'P2 Final Length';
-  showResultScreen(winnerLabel,playerWins,
-    `<div>Your Final Length</div><span>${p1Len}</span><div>${p2StatLabel}</div><span>${p2Len}</span><div>Match Time</div><span>${elapsed}s</span><div>Food Eaten</div><span>${trSnake1.foodEaten}</span>`,
-    'tailremoval');
+  showResultScreen(winnerLabel,playerWins, `<div>Your Final Length</div><span>${p1Len}</span><div>${p2StatLabel}</div><span>${p2Len}</span><div>Match Time</div><span>${elapsed}s</span><div>Food Eaten</div><span>${trSnake1.foodEaten}</span>`, 'tailremoval');
 }
-const STW_INIT_LENGTH = 40; 
-const STW_PLAYER_INIT_LENGTH = 120; 
-const STW_TARGET_LENGTH = 1;
-const STW_FOOD_RADIUS = 11;
-const STW_FOOD_SHRINK = -4; 
-const STW_GRAVITY_DURATION = 5000;
-const STW_RIVAL_DURATION   = 5000;
-const STW_RIVAL_SHRINK      = -4; 
-const STW_TELEPORT_COOLDOWN = 2000;
-const STW_BLACKHOLE_DURATION = 5000;
-const STW_HUNTER_DURATION = 5000;
-const STW_HUNTER_PENALTY = 10;
-const stwCam = { x: 0, y: 0 };
-const STW_CAM_LERP = 0.08;
+
+const STW_INIT_LENGTH = 40, STW_PLAYER_INIT_LENGTH = 120, STW_TARGET_LENGTH = 1, STW_FOOD_RADIUS = 11, STW_FOOD_SHRINK = -4; 
+const STW_GRAVITY_DURATION = 5000, STW_RIVAL_DURATION = 5000, STW_RIVAL_SHRINK = -4, STW_TELEPORT_COOLDOWN = 2000;
+const STW_BLACKHOLE_DURATION = 5000, STW_HUNTER_DURATION = 5000, STW_HUNTER_PENALTY = 10;
+const stwCam = { x: 0, y: 0 }, STW_CAM_LERP = 0.08;
+
 class STWSnake {
   constructor(x,y,angle,color,glow, initLen = STW_INIT_LENGTH){
-    this.x=x; this.y=y; this.angle=angle;
-    this.color=color; this.glow=glow;
-    this.speed=4.3; this.turnSpeed=0.07;
-    this.length=initLen;
-    this.segments=[];
-    this.alive=true;
-    this.foodEaten=0;
-    this.lastTeleportTime=0;
-    for(let i=0;i<initLen;i++)
-      this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
+    this.x=x; this.y=y; this.angle=angle; this.color=color; this.glow=glow; this.speed=4.3; this.turnSpeed=0.07;
+    this.length=initLen; this.segments=[]; this.alive=true; this.foodEaten=0; this.lastTeleportTime=0;
+    for(let i=0;i<initLen;i++) this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
   turn(dir){ this.angle+=dir*this.turnSpeed; }
   setLength(n){
     this.length=Math.max(1,n);
     while(this.segments.length>this.length) this.segments.pop();
     while(this.segments.length<this.length){
-      const last=this.segments[this.segments.length-1];
-      const prev=this.segments[this.segments.length-2]||last;
+      const last=this.segments[this.segments.length-1], prev=this.segments[this.segments.length-2]||last;
       this.segments.push({x:last.x+(last.x-prev.x),y:last.y+(last.y-prev.y)});
     }
   }
   teleportRandom(){
     const now=Date.now();
-    if(now-this.lastTeleportTime < 300) return;
-    this.lastTeleportTime=now;
-    const angle=Math.random()*Math.PI*2;
-    const r=Math.random()*(STW_RADIUS*0.85);
-    this.x=CX+Math.cos(angle)*r;
-    this.y=CY+Math.sin(angle)*r;
-    this.angle=Math.random()*Math.PI*2;
-    this.segments=[];
-    for(let i=0;i<this.length;i++)
-      this.segments.push({x:this.x-Math.cos(this.angle)*i*SEGMENT_SIZE,y:this.y-Math.sin(this.angle)*i*SEGMENT_SIZE});
+    if(now-this.lastTeleportTime < 300) return; this.lastTeleportTime=now;
+    const angle=Math.random()*Math.PI*2, r=Math.random()*(STW_RADIUS*0.85);
+    this.x=CX+Math.cos(angle)*r; this.y=CY+Math.sin(angle)*r; this.angle=Math.random()*Math.PI*2; this.segments=[];
+    for(let i=0;i<this.length;i++) this.segments.push({x:this.x-Math.cos(this.angle)*i*SEGMENT_SIZE,y:this.y-Math.sin(this.angle)*i*SEGMENT_SIZE});
   }
   update(r){
     if(!this.alive) return;
     let spd = this.speed;
-    if (typeof stwHurdleState !== 'undefined' && stwHurdleState === 'slower') {
-      spd = Math.max(0.5, spd - 2);
-    }
-    let nx=this.x+Math.cos(this.angle)*spd;
-    let ny=this.y+Math.sin(this.angle)*spd;
+    if (typeof stwHurdleState !== 'undefined' && stwHurdleState === 'slower') { spd = Math.max(0.5, spd - 2); }
+    let nx=this.x+Math.cos(this.angle)*spd, ny=this.y+Math.sin(this.angle)*spd;
     const dist=Math.hypot(nx-CX,ny-CY);
     if(dist>r*0.89 - SEGMENT_SIZE){
-      const pushAngle=Math.atan2(CY-ny,CX-nx);
-      this.angle=pushAngle+(Math.random()-.5)*0.4;
-      nx=this.x+Math.cos(this.angle)*spd;
-      ny=this.y+Math.sin(this.angle)*spd;
+      const pushAngle=Math.atan2(CY-ny,CX-nx); this.angle=pushAngle+(Math.random()-.5)*0.4;
+      nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
     }
     this.x=nx; this.y=ny;
     this.segments.unshift({x:this.x,y:this.y});
     while(this.segments.length>this.length) this.segments.pop();
   }
-  draw(){
-    renderSnakeBody(ctx, this);
-  }
+  draw(){ renderSnakeBody(ctx, this); }
 }
 class STWFood {
-  constructor(){
-    this.alive=true; this.r=STW_FOOD_RADIUS;
-    this.spawnTime=Date.now();
-    this.respawn();
-  }
+  constructor(){ this.alive=true; this.r=STW_FOOD_RADIUS; this.spawnTime=Date.now(); this.respawn(); }
   respawn(){
     let tries=0;
     do{
-      const angle=Math.random()*Math.PI*2;
-      const r=30+Math.random()*(STW_RADIUS*0.75);
+      const angle=Math.random()*Math.PI*2, r=30+Math.random()*(STW_RADIUS*0.75);
       this.x=CX+Math.cos(angle)*r; this.y=CY+Math.sin(angle)*r; tries++;
     } while(tries<20&&isInsideGravityZone(this.x,this.y));
     this.alive=true;
   }
   draw(){
     if(!this.alive) return;
-    ctx.save();
-    ctx.shadowColor='#f00'; ctx.shadowBlur=8;
-    ctx.beginPath(); ctx.arc(this.x,this.y,this.r+4,0,Math.PI*2);
-    ctx.strokeStyle='#f00'; ctx.lineWidth=1.5; ctx.globalAlpha=0.35; ctx.stroke();
-    ctx.globalAlpha=1;
-    ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
-    const g=ctx.createRadialGradient(this.x,this.y,2,this.x,this.y,this.r);
-    g.addColorStop(0,'#f44'); g.addColorStop(1,'#f00');
+    ctx.save(); ctx.shadowColor='#f00'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r+4,0,Math.PI*2); ctx.strokeStyle='#f00'; ctx.lineWidth=1.5; ctx.globalAlpha=0.35; ctx.stroke();
+    ctx.globalAlpha=1; ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    const g=ctx.createRadialGradient(this.x,this.y,2,this.x,this.y,this.r); g.addColorStop(0,'#f44'); g.addColorStop(1,'#f00');
     ctx.fillStyle=g; ctx.fill();
-    ctx.fillStyle='#fff'; ctx.font='bold 11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('−',this.x,this.y);
+    ctx.fillStyle='#fff'; ctx.font='bold 11px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('−',this.x,this.y);
     ctx.restore();
   }
 }
 class GravityZone {
   constructor(targetSnake){
-    this.r=40; this.alive=true;
-    this.spawnTime=Date.now();
+    this.r=40; this.alive=true; this.spawnTime=Date.now();
     if(targetSnake && targetSnake.alive && targetSnake.segments.length > 0){
-      const seg = targetSnake.segments[0]; 
-      this.x = seg.x; this.y = seg.y;
-    } else {
-      this.x = CX; this.y = CY;
-    }
+      const seg = targetSnake.segments[0]; this.x = seg.x; this.y = seg.y;
+    } else { this.x = CX; this.y = CY; }
   }
   isExpired(){ return Date.now()-this.spawnTime>STW_GRAVITY_DURATION; }
-  contains(x,y){
-    return this.alive && Math.hypot(x-this.x,y-this.y) < this.r;
-  }
+  contains(x,y){ return this.alive && Math.hypot(x-this.x,y-this.y) < this.r; }
   draw(){
     if(!this.alive) return;
-    const age=(Date.now()-this.spawnTime)/STW_GRAVITY_DURATION;
-    const alpha=age<0.15?(age/0.15):age>0.8?((1-age)/0.2):1;
-    const t=Date.now()/600;
+    const age=(Date.now()-this.spawnTime)/STW_GRAVITY_DURATION, alpha=age<0.15?(age/0.15):age>0.8?((1-age)/0.2):1, t=Date.now()/600;
     ctx.save(); ctx.globalAlpha=alpha*0.55;
-    for(let i=0;i<3;i++){
-      ctx.beginPath(); ctx.arc(this.x,this.y,this.r*(0.4+i*0.3),0,Math.PI*2);
-      ctx.strokeStyle=`hsl(${190+i*20},100%,60%)`; ctx.lineWidth=2; 
-      ctx.stroke();
-    }
+    for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(this.x,this.y,this.r*(0.4+i*0.3),0,Math.PI*2); ctx.strokeStyle=`hsl(${190+i*20},100%,60%)`; ctx.lineWidth=2; ctx.stroke(); }
     ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
-    const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r);
-    g.addColorStop(0,'rgba(0,200,255,0.3)'); g.addColorStop(1,'rgba(0,80,180,0)');
+    const g=ctx.createRadialGradient(this.x,this.y,0,this.x,this.y,this.r); g.addColorStop(0,'rgba(0,200,255,0.3)'); g.addColorStop(1,'rgba(0,80,180,0)');
     ctx.fillStyle=g; ctx.fill();
-    ctx.globalAlpha=alpha*0.9; ctx.font=`${18+Math.sin(t)*3}px Segoe UI`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle='#0ff';
-    ctx.fillText('🌀',this.x,this.y);
+    ctx.globalAlpha=alpha*0.9; ctx.font=`${18+Math.sin(t)*3}px Segoe UI`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#0ff'; ctx.fillText('🌀',this.x,this.y);
     ctx.restore();
   }
 }
 class BlackHole {
   constructor(targetSnake) {
-    this.r = 60;
-    this.alive = true;
-    this.spawnTime = Date.now();
-    this.target = targetSnake;
+    this.r = 60; this.alive = true; this.spawnTime = Date.now(); this.target = targetSnake;
     if(targetSnake && targetSnake.alive) {
-        const cx = targetSnake.x + Math.cos(targetSnake.angle + Math.PI/2) * this.r;
-        const cy = targetSnake.y + Math.sin(targetSnake.angle + Math.PI/2) * this.r;
+        const cx = targetSnake.x + Math.cos(targetSnake.angle + Math.PI/2) * this.r, cy = targetSnake.y + Math.sin(targetSnake.angle + Math.PI/2) * this.r;
         this.x = cx; this.y = cy;
-    } else {
-        this.x = CX; this.y = CY;
-    }
+    } else { this.x = CX; this.y = CY; }
   }
   isExpired() { return Date.now() - this.spawnTime > STW_BLACKHOLE_DURATION; }
   draw() {
     if(!this.alive) return;
-    const age = (Date.now() - this.spawnTime) / STW_BLACKHOLE_DURATION;
-    const alpha = age < 0.15 ? (age/0.15) : age > 0.85 ? ((1-age)/0.15) : 1;
-    const t = Date.now()/200;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(this.x, this.y);
-    ctx.rotate(t);
-    const grad = ctx.createRadialGradient(0,0,10, 0,0,this.r + 20);
-    grad.addColorStop(0, '#000');
-    grad.addColorStop(0.4, 'rgba(160, 0, 255, 0.8)');
-    grad.addColorStop(1, 'transparent');
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(0,0,this.r + 20, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2);
-    ctx.fillStyle = '#000'; 
-    ctx.fill();
+    const age = (Date.now() - this.spawnTime) / STW_BLACKHOLE_DURATION, alpha = age < 0.15 ? (age/0.15) : age > 0.85 ? ((1-age)/0.15) : 1, t = Date.now()/200;
+    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(this.x, this.y); ctx.rotate(t);
+    const grad = ctx.createRadialGradient(0,0,10, 0,0,this.r + 20); grad.addColorStop(0, '#000'); grad.addColorStop(0.4, 'rgba(160, 0, 255, 0.8)'); grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0,0,this.r + 20, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2); ctx.fillStyle = '#000'; ctx.fill();
     ctx.restore();
   }
 }
 class RivalSnake extends STWSnake {
   constructor(){
-    const angle=Math.random()*Math.PI*2;
-    const r=STW_RADIUS*0.5+Math.random()*STW_RADIUS*0.3;
-    const x=CX+Math.cos(angle)*r;
-    const y=CY+Math.sin(angle)*r;
+    const angle=Math.random()*Math.PI*2, r=STW_RADIUS*0.5+Math.random()*STW_RADIUS*0.3, x=CX+Math.cos(angle)*r, y=CY+Math.sin(angle)*r;
     super(x,y,Math.random()*Math.PI*2,'#ff6b35','#ff3300');
-    this.speed=4.0; this.turnSpeed=0.065;
-    this.spawnTime=Date.now();
-    this.targetFood=null;
-    this.actionFrame=0; this.lastDecisionFrame=0;
+    this.speed=4.0; this.turnSpeed=0.065; this.spawnTime=Date.now(); this.targetFood=null; this.actionFrame=0; this.lastDecisionFrame=0;
   }
   isExpired(){ return Date.now()-this.spawnTime>STW_RIVAL_DURATION; }
   think(){
-    this.actionFrame++;
-    const head=this.segments[0];
-    const wallDist=STW_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
-    if(wallDist<STW_RADIUS*0.15){
-      const ca=Math.atan2(CY-head.y,CX-head.x);
-      let da=ca-this.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-      this.turn(Math.sign(da)*1.0); return;
-    }
-    if(stwGravityZones.some(gz=>gz.alive&&Math.hypot(head.x-gz.x,head.y-gz.y)<gz.r+30)){
-      const ca=Math.atan2(CY-head.y,CX-head.x);
-      let da=ca-this.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-      this.turn(Math.sign(da)*0.8); return;
-    }
+    this.actionFrame++; const head=this.segments[0], wallDist=STW_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
+    if(wallDist<STW_RADIUS*0.15){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-this.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; this.turn(Math.sign(da)*1.0); return; }
+    if(stwGravityZones.some(gz=>gz.alive&&Math.hypot(head.x-gz.x,head.y-gz.y)<gz.r+30)){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-this.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; this.turn(Math.sign(da)*0.8); return; }
     if(this.actionFrame-this.lastDecisionFrame<20) { this.chaseFood(); return; }
-    this.lastDecisionFrame=this.actionFrame;
-    let nearest=null, nd=Infinity;
-    if (stwPlayerSnake && stwPlayerSnake.alive) {
-      stwFoods.forEach(f=>{ if(!f.alive) return; const d=Math.hypot(f.x-stwPlayerSnake.x,f.y-stwPlayerSnake.y); if(d<nd){nd=d;nearest=f;} });
-    } else {
-      stwFoods.forEach(f=>{ if(!f.alive) return; const d=Math.hypot(f.x-head.x,f.y-head.y); if(d<nd){nd=d;nearest=f;} });
-    }
-    this.targetFood=nearest;
-    this.chaseFood();
+    this.lastDecisionFrame=this.actionFrame; let nearest=null, nd=Infinity;
+    if (stwPlayerSnake && stwPlayerSnake.alive) { stwFoods.forEach(f=>{ if(!f.alive) return; const d=Math.hypot(f.x-stwPlayerSnake.x,f.y-stwPlayerSnake.y); if(d<nd){nd=d;nearest=f;} }); }
+    else { stwFoods.forEach(f=>{ if(!f.alive) return; const d=Math.hypot(f.x-head.x,f.y-head.y); if(d<nd){nd=d;nearest=f;} }); }
+    this.targetFood=nearest; this.chaseFood();
   }
   chaseFood(){
-    if(!this.targetFood||!this.targetFood.alive){
-      if(Math.random()<0.02) this.turn((Math.random()-0.5)*2); return;
-    }
-    const head=this.segments[0];
-    const a=Math.atan2(this.targetFood.y-head.y,this.targetFood.x-head.x);
+    if(!this.targetFood||!this.targetFood.alive){ if(Math.random()<0.02) this.turn((Math.random()-0.5)*2); return; }
+    const head=this.segments[0], a=Math.atan2(this.targetFood.y-head.y,this.targetFood.x-head.x);
     let da=a-this.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     this.turn((Math.sign(da)+(Math.random()-0.5)*0.3)*Math.min(1.2,Math.abs(da)*1.5));
   }
 }
 class MongooseHunter {
   constructor(target) {
-    this.target = target;
-    this.r = 16;
-    this.speed = 4.8;
-    this.alive = true;
-    this.spawnTime = Date.now();
-    const angle = Math.random() * Math.PI * 2;
-    this.x = CX + Math.cos(angle) * (STW_RADIUS * 0.85);
-    this.y = CY + Math.sin(angle) * (STW_RADIUS * 0.85);
+    this.target = target; this.r = 16; this.speed = 4.8; this.alive = true; this.spawnTime = Date.now();
+    const angle = Math.random() * Math.PI * 2; this.x = CX + Math.cos(angle) * (STW_RADIUS * 0.85); this.y = CY + Math.sin(angle) * (STW_RADIUS * 0.85);
   }
   isExpired() { return Date.now() - this.spawnTime > STW_HUNTER_DURATION; }
   update() {
     if (!this.alive || !this.target || !this.target.alive) return;
     const head = this.target.segments[0] || {x: this.target.x, y: this.target.y};
     const angle = Math.atan2(head.y - this.y, head.x - this.x);
-    this.x += Math.cos(angle) * this.speed;
-    this.y += Math.sin(angle) * this.speed;
+    this.x += Math.cos(angle) * this.speed; this.y += Math.sin(angle) * this.speed;
   }
   draw() {
     if (!this.alive) return;
-    const age = (Date.now() - this.spawnTime) / STW_HUNTER_DURATION;
-    const alpha = age < 0.15 ? (age/0.15) : age > 0.85 ? ((1-age)/0.15) : 1;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(this.x, this.y);
-    ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI*2);
-    ctx.fillStyle = '#833'; 
-    ctx.fill();
-    ctx.strokeStyle = '#f04'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('👹', 0, 0);
-    ctx.restore();
+    const age = (Date.now() - this.spawnTime) / STW_HUNTER_DURATION, alpha = age < 0.15 ? (age/0.15) : age > 0.85 ? ((1-age)/0.15) : 1;
+    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(this.x, this.y); ctx.beginPath(); ctx.arc(0, 0, this.r, 0, Math.PI*2);
+    ctx.fillStyle = '#833'; ctx.fill(); ctx.strokeStyle = '#f04'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('👹', 0, 0); ctx.restore();
   }
 }
 class Pulito {
   constructor() {
-    const angle = Math.random() * Math.PI * 2;
-    const r = Math.random() * (STW_RADIUS * 0.7);
-    this.x = CX + Math.cos(angle) * r;
-    this.y = CY + Math.sin(angle) * r;
-    this.r = 60; 
-    this.alive = true;
-    this.spawnTime = Date.now();
-    this.duration = 10000;
-    this.particles = [];
+    const angle = Math.random() * Math.PI * 2, r = Math.random() * (STW_RADIUS * 0.7);
+    this.x = CX + Math.cos(angle) * r; this.y = CY + Math.sin(angle) * r; this.r = 60; this.alive = true; this.spawnTime = Date.now(); this.duration = 10000; this.particles = [];
   }
   isExpired() { return Date.now() - this.spawnTime > this.duration; }
   pull(snake) {
     if (!this.alive || !snake || !snake.alive) return;
-    const head = snake.segments[0] || snake;
-    const dx = this.x - head.x;
-    const dy = this.y - head.y;
-    const dist = Math.hypot(dx, dy);
+    const head = snake.segments[0] || snake, dx = this.x - head.x, dy = this.y - head.y, dist = Math.hypot(dx, dy);
     if (dist < this.r * 1.5) {
-      const pullStrength = (1 - dist / (this.r * 1.5)) * 2.0; 
-      const angle = Math.atan2(dy, dx);
-      snake.x += Math.cos(angle) * pullStrength;
-      snake.y += Math.sin(angle) * pullStrength;
-      snake.angle += (Math.random() - 0.5) * 0.15;
+      const pullStrength = (1 - dist / (this.r * 1.5)) * 2.0, angle = Math.atan2(dy, dx);
+      snake.x += Math.cos(angle) * pullStrength; snake.y += Math.sin(angle) * pullStrength; snake.angle += (Math.random() - 0.5) * 0.15;
     }
   }
   draw() {
     if (!this.alive) return;
-    const age = Date.now() - this.spawnTime;
-    const alpha = age < 500 ? (age/500) : age > 9500 ? ((10000-age)/500) : 1;
-    const t = Date.now() / 150;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(this.x, this.y);
+    const age = Date.now() - this.spawnTime, alpha = age < 500 ? (age/500) : age > 9500 ? ((10000-age)/500) : 1, t = Date.now() / 150;
+    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(this.x, this.y);
     if (Math.random() < 0.8) {
-        let angle = Math.random() * Math.PI * 2;
-        let dist = Math.random() * this.r * 1.5;
-        this.particles.push({
-            x: Math.cos(angle) * dist,
-            y: Math.sin(angle) * dist,
-            vx: Math.cos(angle + Math.PI/2) * 5 - Math.cos(angle) * 2,
-            vy: Math.sin(angle + Math.PI/2) * 5 - Math.sin(angle) * 2,
-            life: 1,
-            r: Math.random() * 8 + 4
-        });
+        let angle = Math.random() * Math.PI * 2, dist = Math.random() * this.r * 1.5;
+        this.particles.push({ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist, vx: Math.cos(angle + Math.PI/2) * 5 - Math.cos(angle) * 2, vy: Math.sin(angle + Math.PI/2) * 5 - Math.sin(angle) * 2, life: 1, r: Math.random() * 8 + 4 });
     }
     this.particles.forEach(p => {
-        p.x += p.vx; p.y += p.vy;
-        let dx = -p.x, dy = -p.y;
-        let d = Math.hypot(dx, dy) || 1;
-        p.vx += (dx/d) * 0.5;
-        p.vy += (dy/d) * 0.5;
-        p.life -= 0.015;
+        p.x += p.vx; p.y += p.vy; let dx = -p.x, dy = -p.y, d = Math.hypot(dx, dy) || 1;
+        p.vx += (dx/d) * 0.5; p.vy += (dy/d) * 0.5; p.life -= 0.015;
         ctx.globalAlpha = Math.max(0, p.life) * alpha * 0.8;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
-        ctx.fillStyle = '#050011';
-        ctx.shadowColor = '#000';
-        ctx.shadowBlur = 10;
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.fillStyle = '#050011'; ctx.shadowColor = '#000'; ctx.shadowBlur = 10; ctx.fill();
     });
     this.particles = this.particles.filter(p => p.life > 0 && Math.hypot(p.x, p.y) > 5);
     ctx.globalAlpha = alpha * 0.95;
-    const pulse = Math.sin(t*0.5) * 20;
-    ctx.beginPath();
-    ctx.arc(0, 0, this.r * 3 + pulse, 0, Math.PI * 2);
+    const pulse = Math.sin(t*0.5) * 20; ctx.beginPath(); ctx.arc(0, 0, this.r * 3 + pulse, 0, Math.PI * 2);
     const ringGrad = ctx.createRadialGradient(0,0, this.r*0.2, 0,0, this.r*3+pulse);
-    ringGrad.addColorStop(0, 'rgba(0,0,0,1)');
-    ringGrad.addColorStop(0.4, 'rgba(10,0,20,0.8)');
-    ringGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = ringGrad;
-    ctx.fill();
-    ctx.rotate(t * 0.25);
-    ctx.fillStyle = '#03000a';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 20;
+    ringGrad.addColorStop(0, 'rgba(0,0,0,1)'); ringGrad.addColorStop(0.4, 'rgba(10,0,20,0.8)'); ringGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ringGrad; ctx.fill(); ctx.rotate(t * 0.25); ctx.fillStyle = '#03000a'; ctx.shadowColor = '#000'; ctx.shadowBlur = 20;
     for (let i = 0; i < 9; i++) {
-        ctx.save();
-        ctx.rotate((Math.PI * 2 / 9) * i + Math.sin(t*0.3) * 0.2);
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        let len = this.r * 2.2 + Math.sin(t * 1.2 + i) * 35;
-        let cp1x = len * 0.4 + Math.cos(t+i)*20;
-        let cp1y = len * 0.5 + Math.sin(t+i)*20;
-        ctx.bezierCurveTo(cp1x, cp1y, len*0.8, -len*0.2, len, 0);
-        ctx.bezierCurveTo(len*0.7, -len*0.5, cp1x*0.5, -len*0.3, 0, 0);
-        ctx.fill();
-        ctx.restore();
+        ctx.save(); ctx.rotate((Math.PI * 2 / 9) * i + Math.sin(t*0.3) * 0.2); ctx.beginPath(); ctx.moveTo(0, 0);
+        let len = this.r * 2.2 + Math.sin(t * 1.2 + i) * 35, cp1x = len * 0.4 + Math.cos(t+i)*20, cp1y = len * 0.5 + Math.sin(t+i)*20;
+        ctx.bezierCurveTo(cp1x, cp1y, len*0.8, -len*0.2, len, 0); ctx.bezierCurveTo(len*0.7, -len*0.5, cp1x*0.5, -len*0.3, 0, 0); ctx.fill(); ctx.restore();
     }
-    ctx.beginPath();
-    ctx.arc(0, 0, this.r * 1.1, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(0, 0, this.r * 1.1, 0, Math.PI * 2);
     const coreGrad = ctx.createRadialGradient(0,0, 0, 0,0, this.r * 1.1);
-    coreGrad.addColorStop(0, '#000000');
-    coreGrad.addColorStop(0.5, '#050011');
-    coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = coreGrad;
-    ctx.fill();
-    ctx.restore();
+    coreGrad.addColorStop(0, '#000000'); coreGrad.addColorStop(0.5, '#050011'); coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = coreGrad; ctx.fill(); ctx.restore();
   }
 }
-let stwActive=false, stwMode='bot';
-let stwSelectedSnake=null, stwPendingMode=null;
-let stwP1Type='small', stwP2Type='big';
-let tempSTWSelectedSnake = null;
-let stwPlayerSnake=null, stwBotSnake=null, stwP2Snake=null;
-let stwFoods=[];
-let stwGravityZones=[];
-let stwBlackHoles=[];
-let stwRivals=[];
-let stwHunters=[];
-let stwPulitos=[];
-let stwAnimFrame=null;
-let stwStartTime=0;
-let stwElapsed=0;
-let stwBestTime = localStorage.getItem('stwBestTime') ? parseInt(localStorage.getItem('stwBestTime')) : Infinity;
-let stwGravityEncounters=0, stwRivalsOutperformed=0;
-let stwInputDir={x:0,y:0}, stwInputDir2={x:0,y:0};
-let stwBotActionFrame=0, stwBotLastDecision=0, stwBotTargetFood=null;
-let stwHurdleState = 'wait_gravity';
-let stwHurdleTimer = 0;
-let stwBotDiff = 'easy';
-function stwSetDiff(d, btn) {
-  stwBotDiff = d;
-  document.querySelectorAll('#stw-diff-section .diff-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-}
+
+let stwActive=false, stwMode='bot', stwSelectedSnake=null, stwPendingMode=null, stwP1Type='small', stwP2Type='big', tempSTWSelectedSnake = null, stwPlayerSnake=null, stwBotSnake=null, stwP2Snake=null;
+let stwFoods=[], stwGravityZones=[], stwBlackHoles=[], stwRivals=[], stwHunters=[], stwPulitos=[], stwAnimFrame=null, stwStartTime=0, stwElapsed=0, stwBestTime = localStorage.getItem('stwBestTime') ? parseInt(localStorage.getItem('stwBestTime')) : Infinity, stwGravityEncounters=0, stwRivalsOutperformed=0;
+let stwInputDir={x:0,y:0}, stwInputDir2={x:0,y:0}, stwBotActionFrame=0, stwBotLastDecision=0, stwBotTargetFood=null, stwHurdleState = 'wait_gravity', stwHurdleTimer = 0, stwBotDiff = 'easy';
+
+function stwSetDiff(d, btn) { stwBotDiff = d; document.querySelectorAll('#stw-diff-section .diff-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
+
 function setupSTWSelect(m){
-  stwPendingMode = m;
-  stwSelectedSnake = null;
-  document.getElementById('stw-card-small').classList.remove('selected');
-  document.getElementById('stw-card-big').classList.remove('selected');
-  document.getElementById('stw-btn-start').classList.add('hidden');
+  stwPendingMode = m; stwSelectedSnake = null;
+  document.getElementById('stw-card-small').classList.remove('selected'); document.getElementById('stw-card-big').classList.remove('selected'); document.getElementById('stw-btn-start').classList.add('hidden');
   document.getElementById('stw-diff-section').classList.toggle('hidden', m !== 'bot');
   const bestTimeEl = document.getElementById('stw-best-time-display');
   if(m === 'self') {
-    if(stwBestTime !== Infinity) {
-      const bestSecs = Math.floor(stwBestTime/1000);
-      const bestMins = Math.floor(bestSecs/60);
-      bestTimeEl.textContent = `BEST TIME: ${bestMins}:${String(bestSecs%60).padStart(2,'0')}`;
-    } else {
-      bestTimeEl.textContent = `BEST TIME: --:--`;
-    }
+    if(stwBestTime !== Infinity) { const bestSecs = Math.floor(stwBestTime/1000), bestMins = Math.floor(bestSecs/60); bestTimeEl.textContent = `BEST TIME: ${bestMins}:${String(bestSecs%60).padStart(2,'0')}`; }
+    else { bestTimeEl.textContent = `BEST TIME: --:--`; }
     bestTimeEl.classList.remove('hidden');
-  } else {
-    bestTimeEl.classList.add('hidden');
-  }
+  } else { bestTimeEl.classList.add('hidden'); }
   showScreen('screen-stw-select');
 }
+
 function stwSelectSnake(t){
-  stwP1Type = t;
-  stwP2Type = t === 'small' ? 'big' : 'small';
-  document.getElementById('stw-card-small').classList.toggle('selected', t === 'small');
-  document.getElementById('stw-card-big').classList.toggle('selected', t === 'big');
-  document.getElementById('stw-btn-start').classList.remove('hidden');
+  stwP1Type = t; stwP2Type = t === 'small' ? 'big' : 'small';
+  document.getElementById('stw-card-small').classList.toggle('selected', t === 'small'); document.getElementById('stw-card-big').classList.toggle('selected', t === 'big'); document.getElementById('stw-btn-start').classList.remove('hidden');
 }
-function confirmStartSTW(){
-  showScreen('screen-stw-game');
-  stopMenuMusic();
-  startShrinkToWin(stwPendingMode);
-}
-function isInsideGravityZone(x,y){
-  return stwGravityZones.some(gz=>gz.alive&&Math.hypot(x-gz.x,y-gz.y)<gz.r+20);
-}
+
+function confirmStartSTW(){ showScreen('screen-stw-game'); stopMenuMusic(); startShrinkToWin(stwPendingMode); }
+
+function isInsideGravityZone(x,y){ return stwGravityZones.some(gz=>gz.alive&&Math.hypot(x-gz.x,y-gz.y)<gz.r+20); }
+
 function enforceOrbit(snake, bh) {
-  const dx = snake.x - bh.x;
-  const dy = snake.y - bh.y;
-  const dist = Math.hypot(dx, dy);
-  const currentAngle = Math.atan2(dy, dx);
-  let targetAngle = currentAngle + Math.PI/2; 
-  targetAngle += (dist - bh.r) * 0.05; 
+  const dx = snake.x - bh.x, dy = snake.y - bh.y, dist = Math.hypot(dx, dy), currentAngle = Math.atan2(dy, dx);
+  let targetAngle = currentAngle + Math.PI/2; targetAngle += (dist - bh.r) * 0.05; 
   let da = targetAngle - snake.angle;
-  while(da > Math.PI) da -= Math.PI*2;
-  while(da < -Math.PI) da += Math.PI*2;
+  while(da > Math.PI) da -= Math.PI*2; while(da < -Math.PI) da += Math.PI*2;
   snake.angle += da * 0.4;
 }
+
 function startShrinkToWin(mode){
-  STW_RADIUS = Math.min(W,H)*0.88; 
-  stwMode=mode; stwActive=true;
-  stwFoods=[]; stwGravityZones=[]; stwBlackHoles=[]; stwRivals=[]; stwHunters=[]; stwPulitos=[]; particles=[];
-  stwGravityEncounters=0; stwRivalsOutperformed=0;
-  stwBotActionFrame=0; stwBotLastDecision=0; stwBotTargetFood=null;
+  STW_RADIUS = Math.min(W,H)*0.88; stwMode=mode; stwActive=true;
+  stwFoods=[]; stwGravityZones=[]; stwBlackHoles=[]; stwRivals=[]; stwHunters=[]; stwPulitos=[]; particles=[]; stwGravityEncounters=0; stwRivalsOutperformed=0; stwBotActionFrame=0; stwBotLastDecision=0; stwBotTargetFood=null;
   initBgParticles();
   document.getElementById('btn-pause').removeProperty ? document.getElementById('btn-pause').classList.remove('hidden') : document.getElementById('btn-pause').className = "btn";
-  const pa=Math.random()*Math.PI*2;
-  const pCfg = stwP1Type === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'};
-  const bCfg = stwP2Type === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'};
+  const pa=Math.random()*Math.PI*2, pCfg = stwP1Type === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'}, bCfg = stwP2Type === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'};
   stwPlayerSnake=new STWSnake(CX+Math.cos(pa)*STW_RADIUS*0.4, CY+Math.sin(pa)*STW_RADIUS*0.4, pa+Math.PI, pCfg.c, pCfg.g, STW_PLAYER_INIT_LENGTH);
   document.getElementById('stw-box-right').classList.toggle('hidden', stwMode === 'self');
-  const rivalLenEl = document.getElementById('stw-rival-len');
-  const rivalCountEl = document.getElementById('stw-rival-count');
+  const rivalLenEl = document.getElementById('stw-rival-len'), rivalCountEl = document.getElementById('stw-rival-count');
   if(stwMode==='bot'){
-    stwP2Snake=null;
-    const ba=pa+Math.PI;
-    stwBotSnake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
-    stwBotSnake.speed = 4.3;
-    stwBotSnake.turnSpeed = stwBotDiff === 'easy' ? 0.05 : 0.07;
-    rivalLenEl.style.color = bCfg.c;
-    rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`;
-    rivalCountEl.style.color = bCfg.c;
+    stwP2Snake=null; const ba=pa+Math.PI; stwBotSnake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
+    stwBotSnake.speed = 4.3; stwBotSnake.turnSpeed = stwBotDiff === 'easy' ? 0.05 : 0.07;
+    rivalLenEl.style.color = bCfg.c; rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`; rivalCountEl.style.color = bCfg.c;
   } else if(stwMode==='local'){
-    stwBotSnake=null;
-    const ba=pa+Math.PI;
-    stwP2Snake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
-    rivalLenEl.style.color = bCfg.c;
-    rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`;
-    rivalCountEl.style.color = bCfg.c;
+    stwBotSnake=null; const ba=pa+Math.PI; stwP2Snake=new STWSnake(CX+Math.cos(ba)*STW_RADIUS*0.4, CY+Math.sin(ba)*STW_RADIUS*0.4, ba+Math.PI, bCfg.c, bCfg.g, STW_PLAYER_INIT_LENGTH);
+    rivalLenEl.style.color = bCfg.c; rivalLenEl.style.textShadow = `0 0 12px ${bCfg.g}`; rivalCountEl.style.color = bCfg.c;
   } else {
-    stwBotSnake=null;
-    stwP2Snake=null;
-    rivalLenEl.style.color = '#ff6b35';
-    rivalLenEl.style.textShadow = '0 0 12px #ff3300';
-    rivalCountEl.style.color = '#ff3300';
+    stwBotSnake=null; stwP2Snake=null; rivalLenEl.style.color = '#ff6b35'; rivalLenEl.style.textShadow = '0 0 12px #ff3300'; rivalCountEl.style.color = '#ff3300';
   }
-  stwCam.x = stwPlayerSnake.x;
-  stwCam.y = stwPlayerSnake.y;
+  stwCam.x = stwPlayerSnake.x; stwCam.y = stwPlayerSnake.y;
   for(let i=0;i<8;i++) stwFoods.push(new STWFood());
-  stwStartTime=Date.now(); stwElapsed=0;
-  stwHurdleState = 'wait_gravity';
-  stwHurdleTimer = Date.now() + 10000;
+  stwStartTime=Date.now(); stwElapsed=0; stwHurdleState = 'wait_gravity'; stwHurdleTimer = Date.now() + 10000;
   document.getElementById('stw-player-len').textContent = stwPlayerSnake.length;
   document.getElementById('stw-target-label').textContent = stwMode==='local' ? 'P1 TARGET: ' + STW_TARGET_LENGTH : 'TARGET: ' + STW_TARGET_LENGTH;
   document.getElementById('stw-rival-label').textContent = stwMode==='bot' ? '🤖 BOT' : (stwMode==='local' ? '🐍 P2 LENGTH' : '🌀 RIVALS');
   document.getElementById('stw-rival-len').textContent = stwMode==='bot' ? stwBotSnake.length : (stwMode==='local' ? stwP2Snake.length : '—');
   document.getElementById('stw-event-label').classList.add('hidden');
-  if(stwMode === 'self') {
-      document.getElementById('stw-target-label').classList.add('hidden');
-  } else {
-      document.getElementById('stw-target-label').classList.remove('hidden');
-  }
+  if(stwMode === 'self') { document.getElementById('stw-target-label').classList.add('hidden'); } else { document.getElementById('stw-target-label').classList.remove('hidden'); }
   const isMobile='ontouchstart' in window;
-  document.getElementById('stw-joystick-left').classList.toggle('hidden',!isMobile);
-  document.getElementById('stw-joystick-right').classList.toggle('hidden',!(isMobile && stwMode==='local'));
+  document.getElementById('stw-joystick-left').classList.toggle('hidden',!isMobile); document.getElementById('stw-joystick-right').classList.toggle('hidden',!(isMobile && stwMode==='local'));
   if(isMobile) setupSTWJoystick();
-  if(stwAnimFrame) cancelAnimationFrame(stwAnimFrame);
-  stwAnimFrame=null;
-  stwGameLoop();
+  if(stwAnimFrame) cancelAnimationFrame(stwAnimFrame); stwAnimFrame=null; stwGameLoop();
 }
+
 function stwHandleInput(){
-  if(keys['a']||keys['A']) stwPlayerSnake.turn(-1);
-  if(keys['d']||keys['D']) stwPlayerSnake.turn(1);
-  if(keys['w']||keys['W']) stwPlayerSnake.speed = 6.0;
-  else if(keys['s']||keys['S']) stwPlayerSnake.speed = 3.0;
-  else stwPlayerSnake.speed = 4.3;
+  if(keys['a']||keys['A']) stwPlayerSnake.turn(-1); if(keys['d']||keys['D']) stwPlayerSnake.turn(1);
+  if(keys['w']||keys['W']) stwPlayerSnake.speed = 6.0; else if(keys['s']||keys['S']) stwPlayerSnake.speed = 3.0; else stwPlayerSnake.speed = 4.3;
   if(stwInputDir.x!==0||stwInputDir.y!==0){
-    const ta=Math.atan2(stwInputDir.y,stwInputDir.x);
-    let da=ta-stwPlayerSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+    const ta=Math.atan2(stwInputDir.y,stwInputDir.x); let da=ta-stwPlayerSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
     stwPlayerSnake.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
   }
   if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) {
-    if(keys['ArrowLeft']) stwP2Snake.turn(-1);
-    if(keys['ArrowRight']) stwP2Snake.turn(1);
-    if(keys['ArrowUp']) stwP2Snake.speed = 6.0;
-    else if(keys['ArrowDown']) stwP2Snake.speed = 3.0;
-    else stwP2Snake.speed = 4.3;
+    if(keys['ArrowLeft']) stwP2Snake.turn(-1); if(keys['ArrowRight']) stwP2Snake.turn(1);
+    if(keys['ArrowUp']) stwP2Snake.speed = 6.0; else if(keys['ArrowDown']) stwP2Snake.speed = 3.0; else stwP2Snake.speed = 4.3;
     if(stwInputDir2.x!==0||stwInputDir2.y!==0){
-      const ta=Math.atan2(stwInputDir2.y,stwInputDir2.x);
-      let da=ta-stwP2Snake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
+      const ta=Math.atan2(stwInputDir2.y,stwInputDir2.x); let da=ta-stwP2Snake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
       stwP2Snake.turn(Math.sign(da)*Math.min(1,Math.abs(da)*2));
     }
   }
 }
+
 function stwBotThink(){
   if(!stwBotSnake||!stwBotSnake.alive) return;
-  stwBotActionFrame++;
-  const head=stwBotSnake.segments[0];
-  const wallDist=STW_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY);
-  const evadeDist = stwBotDiff === 'hard' ? STW_RADIUS * 0.18 : STW_RADIUS * 0.12;
-  if(wallDist < evadeDist){
-    const ca=Math.atan2(CY-head.y,CX-head.x);
-    let da=ca-stwBotSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-    stwBotSnake.turn(Math.sign(da)*1.0); return;
-  }
-  const avoidZone = stwBotDiff === 'hard' ? 45 : (stwBotDiff === 'medium' ? 35 : 20);
-  let hazard = null;
-  for (let gz of stwGravityZones) {
-     if (gz.alive && Math.hypot(head.x - gz.x, head.y - gz.y) < gz.r + avoidZone) { hazard = gz; break; }
-  }
-  if (!hazard) {
-     for (let bh of stwBlackHoles) {
-          if (bh.alive && Math.hypot(head.x - bh.x, head.y - bh.y) < bh.r + avoidZone) { hazard = bh; break; }
-     }
-  }
+  stwBotActionFrame++; const head=stwBotSnake.segments[0], wallDist=STW_RADIUS*0.89-Math.hypot(head.x-CX,head.y-CY), evadeDist = stwBotDiff === 'hard' ? STW_RADIUS * 0.18 : STW_RADIUS * 0.12;
+  if(wallDist < evadeDist){ const ca=Math.atan2(CY-head.y,CX-head.x); let da=ca-stwBotSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2; stwBotSnake.turn(Math.sign(da)*1.0); return; }
+  const avoidZone = stwBotDiff === 'hard' ? 45 : (stwBotDiff === 'medium' ? 35 : 20); let hazard = null;
+  for (let gz of stwGravityZones) { if (gz.alive && Math.hypot(head.x - gz.x, head.y - gz.y) < gz.r + avoidZone) { hazard = gz; break; } }
+  if (!hazard) { for (let bh of stwBlackHoles) { if (bh.alive && Math.hypot(head.x - bh.x, head.y - bh.y) < bh.r + avoidZone) { hazard = bh; break; } } }
   if(hazard) {
-    const hazA = Math.atan2(hazard.y - head.y, hazard.x - head.x);
-    let da = hazA - stwBotSnake.angle; 
-    while(da > Math.PI) da -= Math.PI*2; 
-    while(da < -Math.PI) da += Math.PI*2;
-    stwBotSnake.turn(-Math.sign(da) * 1.2); 
-    return;
+    const hazA = Math.atan2(hazard.y - head.y, hazard.x - head.x); let da = hazA - stwBotSnake.angle; 
+    while(da > Math.PI) da -= Math.PI*2; while(da < -Math.PI) da += Math.PI*2;
+    stwBotSnake.turn(-Math.sign(da) * 1.2); return;
   }
   let di = stwBotDiff === 'hard' ? 5 : (stwBotDiff === 'medium' ? 15 : 25);
   if(stwBotActionFrame-stwBotLastDecision < di){ stwBotChaseFood(); return; }
-  stwBotLastDecision=stwBotActionFrame;
-  let nearest=null, nd=Infinity;
+  stwBotLastDecision=stwBotActionFrame; let nearest=null, nd=Infinity;
   stwFoods.forEach(f=>{ if(!f.alive) return; const d=Math.hypot(f.x-head.x,f.y-head.y); if(d<nd){nd=d;nearest=f;} });
-  stwBotTargetFood=nearest;
-  stwBotChaseFood();
+  stwBotTargetFood=nearest; stwBotChaseFood();
 }
 function stwBotChaseFood(){
   if(!stwBotTargetFood||!stwBotTargetFood.alive){ if(Math.random()<0.02) stwBotSnake.turn((Math.random()-0.5)*2); return; }
-  const head=stwBotSnake.segments[0];
-  const distToFood = Math.hypot(stwBotTargetFood.x - head.x, stwBotTargetFood.y - head.y);
-  const a=Math.atan2(stwBotTargetFood.y-head.y,stwBotTargetFood.x-head.x);
+  const head=stwBotSnake.segments[0], distToFood = Math.hypot(stwBotTargetFood.x - head.x, stwBotTargetFood.y - head.y), a=Math.atan2(stwBotTargetFood.y-head.y,stwBotTargetFood.x-head.x);
   let da=a-stwBotSnake.angle; while(da>Math.PI) da-=Math.PI*2; while(da<-Math.PI) da+=Math.PI*2;
-  if (distToFood < 50 && Math.abs(da) > 1.2) {
-      stwBotSnake.turn(-Math.sign(da) * 0.8);
-      return;
-  }
-  const maxTurn = stwBotDiff === 'easy' ? 1.0 : 1.6;
-  const noise = stwBotDiff === 'hard' ? 0.0 : (stwBotDiff === 'medium' ? 0.15 : 0.4);
+  if (distToFood < 50 && Math.abs(da) > 1.2) { stwBotSnake.turn(-Math.sign(da) * 0.8); return; }
+  const maxTurn = stwBotDiff === 'easy' ? 1.0 : 1.6, noise = stwBotDiff === 'hard' ? 0.0 : (stwBotDiff === 'medium' ? 0.15 : 0.4);
   stwBotSnake.turn((Math.sign(da)+(Math.random()-0.5)*noise)*Math.min(maxTurn,Math.abs(da)*1.6));
 }
+
 function stwGameLoop(){
   if(!stwActive) return;
   if(isPaused){ stwAnimFrame=requestAnimationFrame(stwGameLoop); return; }
-  const now=Date.now();
-  stwElapsed=now-stwStartTime;
-  updateShake();
-  let targetCamX = stwPlayerSnake.x;
-  let targetCamY = stwPlayerSnake.y;
-  if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) {
-      targetCamX = (stwPlayerSnake.x + stwP2Snake.x) / 2;
-      targetCamY = (stwPlayerSnake.y + stwP2Snake.y) / 2;
-  }
-  stwCam.x += (targetCamX - stwCam.x) * STW_CAM_LERP;
-  stwCam.y += (targetCamY - stwCam.y) * STW_CAM_LERP;
-  const camOffX = CX - stwCam.x;
-  const camOffY = CY - stwCam.y;
-  ctx.save();
-  ctx.translate(shakeX, shakeY);
-  ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20);
-  ctx.save();
-  ctx.translate(camOffX, camOffY);
-  drawArena();
+  const now=Date.now(); stwElapsed=now-stwStartTime; updateShake();
+  let targetCamX = stwPlayerSnake.x, targetCamY = stwPlayerSnake.y;
+  if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) { targetCamX = (stwPlayerSnake.x + stwP2Snake.x) / 2; targetCamY = (stwPlayerSnake.y + stwP2Snake.y) / 2; }
+  stwCam.x += (targetCamX - stwCam.x) * STW_CAM_LERP; stwCam.y += (targetCamY - stwCam.y) * STW_CAM_LERP;
+  const camOffX = CX - stwCam.x, camOffY = CY - stwCam.y;
+  ctx.save(); ctx.translate(shakeX, shakeY); ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20); ctx.save(); ctx.translate(camOffX, camOffY); drawArena();
+  
   if(now >= stwHurdleTimer){
     if(stwHurdleState === 'wait_gravity'){
       stwGravityZones = [];
-      if(stwMode === 'bot') {
-        if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
-        if(stwBotSnake && stwBotSnake.alive) stwGravityZones.push(new GravityZone(stwBotSnake));
-      } else if (stwMode === 'local') {
-        if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
-        if(stwP2Snake && stwP2Snake.alive) stwGravityZones.push(new GravityZone(stwP2Snake));
-      } else {
-        if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake));
-      }
-      stwHurdleState = 'gravity';
-      stwHurdleTimer = now + 5000;
+      if(stwMode === 'bot') { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); if(stwBotSnake && stwBotSnake.alive) stwGravityZones.push(new GravityZone(stwBotSnake)); }
+      else if (stwMode === 'local') { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); if(stwP2Snake && stwP2Snake.alive) stwGravityZones.push(new GravityZone(stwP2Snake)); }
+      else { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); }
+      stwHurdleState = 'gravity'; stwHurdleTimer = now + 5000;
     } else if(stwHurdleState === 'gravity'){
-      stwHurdleState = 'wait_blackhole';
-      stwHurdleTimer = now + 10000;
+      stwHurdleState = 'wait_blackhole'; stwHurdleTimer = now + 10000;
     } else if(stwHurdleState === 'wait_blackhole'){
       stwBlackHoles = [];
       if(stwPlayerSnake && stwPlayerSnake.alive) stwBlackHoles.push(new BlackHole(stwPlayerSnake));
       if(stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwBlackHoles.push(new BlackHole(stwBotSnake));
       if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwBlackHoles.push(new BlackHole(stwP2Snake));
-      stwHurdleState = 'blackhole';
-      stwHurdleTimer = now + 5000;
-      const el = document.getElementById('stw-event-label');
-      el.textContent = '🕳️ BLACK HOLE!';
-      el.style.color = '#a0f';
-      el.classList.remove('hidden');
-      setTimeout(()=> {
-        el.classList.add('hidden');
-      }, 2000);
+      stwHurdleState = 'blackhole'; stwHurdleTimer = now + 5000;
+      const el = document.getElementById('stw-event-label'); el.textContent = '🕳️ BLACK HOLE!'; el.style.color = '#a0f'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
     } else if(stwHurdleState === 'blackhole'){
-      stwHurdleState = 'wait_rival';
-      stwHurdleTimer = now + 10000;
+      stwHurdleState = 'wait_rival'; stwHurdleTimer = now + 10000;
     } else if(stwHurdleState === 'wait_rival'){
       for(let i=0;i<3;i++) stwRivals.push(new RivalSnake());
-      stwHurdleState = 'rival';
-      stwHurdleTimer = now + 5000;
+      stwHurdleState = 'rival'; stwHurdleTimer = now + 5000;
     } else if(stwHurdleState === 'rival'){
-      stwHurdleState = 'wait_hunter';
-      stwHurdleTimer = now + 10000;
+      stwHurdleState = 'wait_hunter'; stwHurdleTimer = now + 10000;
     } else if(stwHurdleState === 'wait_hunter'){
       stwHunters = [];
       if (stwPlayerSnake && stwPlayerSnake.alive) stwHunters.push(new MongooseHunter(stwPlayerSnake));
       if (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwHunters.push(new MongooseHunter(stwBotSnake));
       if (stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwHunters.push(new MongooseHunter(stwP2Snake));
-      stwHurdleState = 'hunter';
-      stwHurdleTimer = now + STW_HUNTER_DURATION;
-      const el = document.getElementById('stw-event-label');
-      el.textContent = '👹 ENEMY HUNTERS!';
-      el.style.color = '#f04';
-      el.classList.remove('hidden');
-      setTimeout(()=> {
-        el.classList.add('hidden');
-      }, 2000);
+      stwHurdleState = 'hunter'; stwHurdleTimer = now + STW_HUNTER_DURATION;
+      const el = document.getElementById('stw-event-label'); el.textContent = '👹 ENEMY HUNTERS!'; el.style.color = '#f04'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
     } else if(stwHurdleState === 'hunter'){
-      stwHurdleState = 'wait_slower';
-      stwHurdleTimer = now + 10000;
+      stwHurdleState = 'wait_slower'; stwHurdleTimer = now + 10000;
     } else if(stwHurdleState === 'wait_slower'){
-      stwHurdleState = 'slower';
-      stwHurdleTimer = now + 5000;
-      const el = document.getElementById('stw-event-label');
-      el.textContent = '🐌 SLOW MOTION!';
-      el.style.color = '#fa0';
-      el.classList.remove('hidden');
-      setTimeout(()=> {
-        el.classList.add('hidden');
-      }, 5000);
+      stwHurdleState = 'slower'; stwHurdleTimer = now + 5000;
+      const el = document.getElementById('stw-event-label'); el.textContent = '🐌 SLOW MOTION!'; el.style.color = '#fa0'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 5000);
     } else if(stwHurdleState === 'slower'){
-      stwHurdleState = 'wait_pulito';
-      stwHurdleTimer = now + 10000;
+      stwHurdleState = 'wait_pulito'; stwHurdleTimer = now + 10000;
     } else if(stwHurdleState === 'wait_pulito'){
-      stwPulitos = [];
-      stwPulitos.push(new Pulito());
+      stwPulitos = []; stwPulitos.push(new Pulito());
       let p2Exists = (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) || (stwMode === 'local' && stwP2Snake && stwP2Snake.alive);
       if (p2Exists) stwPulitos.push(new Pulito());
-      stwHurdleState = 'pulito';
-      stwHurdleTimer = now + 10000;
-      const el = document.getElementById('stw-event-label');
-      el.textContent = '🌪️ BLACK ANOMALY!';
-      el.style.color = '#888';
-      el.classList.remove('hidden');
-      setTimeout(()=> {
-        el.classList.add('hidden');
-      }, 2000);
+      stwHurdleState = 'pulito'; stwHurdleTimer = now + 10000;
+      const el = document.getElementById('stw-event-label'); el.textContent = '🌪️ BLACK ANOMALY!'; el.style.color = '#888'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
     } else if(stwHurdleState === 'pulito'){
-      stwHurdleState = 'wait_slipo';
-      stwHurdleTimer = now + 10000;
+      stwHurdleState = 'wait_slipo'; stwHurdleTimer = now + 10000;
     } else if(stwHurdleState === 'wait_slipo'){
-      stwHurdleState = 'slipo';
-      stwHurdleTimer = now + 10000;
-      const el = document.getElementById('stw-event-label');
-      el.textContent = '✨ SLIPO ACTIVE!';
-      el.style.color = '#e4e8f0';
-      el.classList.remove('hidden');
-      setTimeout(()=> {
-        el.classList.add('hidden');
-      }, 2000);
+      stwHurdleState = 'slipo'; stwHurdleTimer = now + 10000;
+      const el = document.getElementById('stw-event-label'); el.textContent = '✨ SLIPO ACTIVE!'; el.style.color = '#e4e8f0'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
     } else if(stwHurdleState === 'slipo'){
-      stwHurdleState = 'wait_gravity';
-      stwHurdleTimer = now + 10000;
+      stwHurdleState = 'wait_gravity'; stwHurdleTimer = now + 10000;
     }
   }
+
   stwGravityZones=stwGravityZones.filter(gz=>{ if(gz.isExpired()){ gz.alive=false; return false; } return true; });
   stwBlackHoles=stwBlackHoles.filter(bh=>{ if(bh.isExpired()){ bh.alive=false; return false; } return true; });
   stwHunters=stwHunters.filter(h=>{ if(h.isExpired()){ h.alive=false; return false; } return true; });
   stwRivals=stwRivals.filter(r=>{ if(r.isExpired()){ stwRivalsOutperformed++; return false; } return true; });
-  stwPulitos=stwPulitos.filter(p=>{ 
-      if(p.isExpired()){ 
-          p.alive=false; 
-          while(stwFoods.length < 8) stwFoods.push(new STWFood());
-          return false; 
-      } 
-      return true; 
-  });
+  stwPulitos=stwPulitos.filter(p=>{ if(p.isExpired()){ p.alive=false; while(stwFoods.length < 8) stwFoods.push(new STWFood()); return false; } return true; });
+
   stwHandleInput();
   if(stwBotSnake) stwBotThink(); 
-  stwBlackHoles.forEach(bh => {
-    if(!bh.alive) return;
-    if(bh.target && bh.target.alive) enforceOrbit(bh.target, bh);
-  });
-  stwPulitos.forEach(p => {
-    p.pull(stwPlayerSnake);
-    if(stwP2Snake) p.pull(stwP2Snake);
-    if(stwBotSnake) p.pull(stwBotSnake);
-  });
+  
+  stwBlackHoles.forEach(bh => { if(!bh.alive) return; if(bh.target && bh.target.alive) enforceOrbit(bh.target, bh); });
+  stwPulitos.forEach(p => { p.pull(stwPlayerSnake); if(stwP2Snake) p.pull(stwP2Snake); if(stwBotSnake) p.pull(stwBotSnake); });
+
   if (stwHurdleState === 'slipo') {
       let activeSnakes = [];
       if (stwPlayerSnake && stwPlayerSnake.alive) activeSnakes.push(stwPlayerSnake);
@@ -2997,123 +2236,80 @@ function stwGameLoop(){
           if (!f.alive) return;
           let moveX = 0, moveY = 0;
           activeSnakes.forEach(s => {
-              const head = s.segments[0] || s;
-              const dx = f.x - head.x;
-              const dy = f.y - head.y;
-              const dist = Math.hypot(dx, dy);
+              const head = s.segments[0] || s, dx = f.x - head.x, dy = f.y - head.y, dist = Math.hypot(dx, dy);
               if (dist < 160) {
-                  const angleToFood = Math.atan2(dy, dx);
-                  let angleDiff = angleToFood - s.angle;
-                  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-                  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                  const angleToFood = Math.atan2(dy, dx); let angleDiff = angleToFood - s.angle;
+                  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2; while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
                   if (Math.abs(angleDiff) < Math.PI / 2.2) { 
-                      const speed = (1 - dist / 160) * 5.0; 
-                      moveX += Math.cos(angleToFood) * speed;
-                      moveY += Math.sin(angleToFood) * speed;
+                      const speed = (1 - dist / 160) * 5.0; moveX += Math.cos(angleToFood) * speed; moveY += Math.sin(angleToFood) * speed;
                   }
               }
           });
           if (moveX !== 0 || moveY !== 0) {
-              f.x += moveX;
-              f.y += moveY;
-              const distFromCenter = Math.hypot(f.x - CX, f.y - CY);
-              const maxR = STW_RADIUS * 0.82;
+              f.x += moveX; f.y += moveY;
+              const distFromCenter = Math.hypot(f.x - CX, f.y - CY), maxR = STW_RADIUS * 0.82;
               if (distFromCenter > maxR) {
                   const angleFromCenter = Math.atan2(f.y - CY, f.x - CX);
-                  f.x = CX + Math.cos(angleFromCenter) * maxR;
-                  f.y = CY + Math.sin(angleFromCenter) * maxR;
+                  f.x = CX + Math.cos(angleFromCenter) * maxR; f.y = CY + Math.sin(angleFromCenter) * maxR;
               }
           }
       });
   }
-  stwPlayerSnake.update(STW_RADIUS);
-  if(stwBotSnake) stwBotSnake.update(STW_RADIUS);
-  if(stwP2Snake) stwP2Snake.update(STW_RADIUS);
+
+  stwPlayerSnake.update(STW_RADIUS); if(stwBotSnake) stwBotSnake.update(STW_RADIUS); if(stwP2Snake) stwP2Snake.update(STW_RADIUS);
   stwRivals.forEach(r=>{ r.think(); r.update(STW_RADIUS); });
+  
   stwPulitos.forEach(p => {
     if (!p.alive) return;
     let age = Date.now() - p.spawnTime;
     if (age < 5000) {
       stwFoods.forEach(f => {
         if (!f.alive) return;
-        let dx = p.x - f.x;
-        let dy = p.y - f.y;
-        let dist = Math.hypot(dx, dy);
-        if (dist < 20) {
-          f.alive = false;
-        } else {
-          let a = Math.atan2(dy, dx);
-          a += 0.5; 
+        let dx = p.x - f.x, dy = p.y - f.y, dist = Math.hypot(dx, dy);
+        if (dist < 20) { f.alive = false; } else {
+          let a = Math.atan2(dy, dx); a += 0.5; 
           let speed = 1.5 + (1 - Math.min(dist, STW_RADIUS)/STW_RADIUS) * 15;
-          f.x += Math.cos(a) * speed;
-          f.y += Math.sin(a) * speed;
+          f.x += Math.cos(a) * speed; f.y += Math.sin(a) * speed;
           if (dist < 100) f.r = Math.max(1, STW_FOOD_RADIUS * (dist / 100));
         }
       });
-    } else {
-      stwFoods.forEach(f => f.alive = false);
-    }
+    } else { stwFoods.forEach(f => f.alive = false); }
   });
+
   if (stwPulitos.some(p => p.alive)) {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0); 
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(0, 0, W, H);
-      ctx.restore();
-      if (settings.shake) {
-          shakeX = (Math.random() - 0.5) * 4;
-          shakeY = (Math.random() - 0.5) * 4;
-      }
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, H); ctx.restore();
+      if (settings.shake) { shakeX = (Math.random() - 0.5) * 4; shakeY = (Math.random() - 0.5) * 4; }
   }
+
   stwHunters.forEach(h => {
-    h.update();
-    if(!h.alive) return;
+    h.update(); if(!h.alive) return;
     const target = h.target;
     if(target && target.alive) {
       if(Math.hypot(h.x - target.x, h.y - target.y) < SEGMENT_SIZE + h.r) {
-        h.alive = false;
-        target.setLength(target.length + STW_HUNTER_PENALTY);
+        h.alive = false; target.setLength(target.length + STW_HUNTER_PENALTY);
         addParticles(target.x, target.y, '#f04', 20);
         if (target === stwPlayerSnake || target === stwP2Snake) triggerShake();
       }
     }
   });
+
   stwGravityZones.forEach(gz=>{
     if(!gz.alive) return;
     if(gz.contains(stwPlayerSnake.x,stwPlayerSnake.y)){
-      stwPlayerSnake.teleportRandom();
-      stwGravityEncounters++;
-      addParticles(stwPlayerSnake.x,stwPlayerSnake.y,'#0af',20);
-      triggerShake();
-      const el=document.getElementById('stw-event-label');
-      el.textContent = '⚡ GRAVITY ZONE!';
-      el.style.color = '#f0a';
-      el.classList.remove('hidden');
-      setTimeout(()=>el.classList.add('hidden'),1200);
+      stwPlayerSnake.teleportRandom(); stwGravityEncounters++;
+      addParticles(stwPlayerSnake.x,stwPlayerSnake.y,'#0af',20); triggerShake();
+      const el=document.getElementById('stw-event-label'); el.textContent = '⚡ GRAVITY ZONE!'; el.style.color = '#f0a'; el.classList.remove('hidden'); setTimeout(()=>el.classList.add('hidden'),1200);
       gz.alive = false; 
     }
-    if(stwBotSnake&&gz.contains(stwBotSnake.x,stwBotSnake.y)){
-      stwBotSnake.teleportRandom();
-      stwBotTargetFood=null;
-      gz.alive = false; 
-    }
-    if(stwP2Snake&&gz.contains(stwP2Snake.x,stwP2Snake.y)){
-      stwP2Snake.teleportRandom();
-      gz.alive = false; 
-    }
-    stwRivals.forEach(rv=>{ 
-      if(gz.contains(rv.x,rv.y)) {
-        rv.teleportRandom(); 
-        gz.alive = false; 
-      } 
-    });
+    if(stwBotSnake&&gz.contains(stwBotSnake.x,stwBotSnake.y)){ stwBotSnake.teleportRandom(); stwBotTargetFood=null; gz.alive = false; }
+    if(stwP2Snake&&gz.contains(stwP2Snake.x,stwP2Snake.y)){ stwP2Snake.teleportRandom(); gz.alive = false; }
+    stwRivals.forEach(rv=>{ if(gz.contains(rv.x,rv.y)) { rv.teleportRandom(); gz.alive = false; } });
   });
+
   stwFoods.forEach(f=>{
     if(!f.alive) return;
     if(Math.hypot(stwPlayerSnake.x-f.x,stwPlayerSnake.y-f.y)<SEGMENT_SIZE+f.r){
-      f.alive=false;
-      stwPlayerSnake.setLength(stwPlayerSnake.length+STW_FOOD_SHRINK);
-      stwPlayerSnake.foodEaten++;
+      f.alive=false; stwPlayerSnake.setLength(stwPlayerSnake.length+STW_FOOD_SHRINK); stwPlayerSnake.foodEaten++;
       addParticles(f.x,f.y, '#f44', 16); triggerShake();
       setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
     }
@@ -3122,9 +2318,7 @@ function stwGameLoop(){
     stwFoods.forEach(f=>{
       if(!f.alive) return;
       if(Math.hypot(stwBotSnake.x-f.x,stwBotSnake.y-f.y)<SEGMENT_SIZE+f.r){
-        f.alive=false;
-        stwBotSnake.setLength(stwBotSnake.length+STW_FOOD_SHRINK);
-        stwBotSnake.foodEaten++;
+        f.alive=false; stwBotSnake.setLength(stwBotSnake.length+STW_FOOD_SHRINK); stwBotSnake.foodEaten++;
         addParticles(f.x,f.y, '#f44', 16); triggerShake();
         setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
       }
@@ -3134,9 +2328,7 @@ function stwGameLoop(){
     stwFoods.forEach(f=>{
       if(!f.alive) return;
       if(Math.hypot(stwP2Snake.x-f.x,stwP2Snake.y-f.y)<SEGMENT_SIZE+f.r){
-        f.alive=false;
-        stwP2Snake.setLength(stwP2Snake.length+STW_FOOD_SHRINK);
-        stwP2Snake.foodEaten++;
+        f.alive=false; stwP2Snake.setLength(stwP2Snake.length+STW_FOOD_SHRINK); stwP2Snake.foodEaten++;
         addParticles(f.x,f.y, '#f44', 16); triggerShake();
         setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
       }
@@ -3146,178 +2338,107 @@ function stwGameLoop(){
     stwFoods.forEach(f=>{
       if(!f.alive) return;
       if(Math.hypot(rv.x-f.x,rv.y-f.y)<SEGMENT_SIZE+f.r){
-        f.alive=false;
-        rv.setLength(rv.length+STW_RIVAL_SHRINK);
-        rv.foodEaten++;
+        f.alive=false; rv.setLength(rv.length+STW_RIVAL_SHRINK); rv.foodEaten++;
         addParticles(f.x,f.y, '#f44', 16);
         setTimeout(()=>{ if(stwActive && stwPulitos.length === 0){ stwFoods.push(new STWFood()); }},400);
       }
     });
   });
-  stwFoods=stwFoods.filter(f=>f.alive);
-  updateParticles();
-  stwPulitos.forEach(p=>p.draw());
-  stwGravityZones.forEach(gz=>gz.draw());
-  stwBlackHoles.forEach(bh=>bh.draw());
-  stwFoods.forEach(f=>f.draw());
-  stwRivals.forEach(r=>r.draw());
-  stwHunters.forEach(h=>h.draw());
-  if(stwBotSnake) stwBotSnake.draw();
-  if(stwP2Snake) stwP2Snake.draw();
-  stwPlayerSnake.draw();
-  drawParticles();
+
+  stwFoods=stwFoods.filter(f=>f.alive); updateParticles();
+  stwPulitos.forEach(p=>p.draw()); stwGravityZones.forEach(gz=>gz.draw()); stwBlackHoles.forEach(bh=>bh.draw()); stwFoods.forEach(f=>f.draw()); stwRivals.forEach(r=>r.draw()); stwHunters.forEach(h=>h.draw());
+  if(stwBotSnake) stwBotSnake.draw(); if(stwP2Snake) stwP2Snake.draw(); stwPlayerSnake.draw(); drawParticles();
   ctx.restore(); 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(CX,CY,SEGMENT_SIZE*1.8,0,Math.PI*2);
-  ctx.strokeStyle='rgba(0,255,255,0.2)';
-  ctx.lineWidth=1.5;
-  ctx.stroke();
-  ctx.restore();
-  ctx.restore(); 
-  const secs=Math.floor(stwElapsed/1000);
-  const mins=Math.floor(secs/60);
+  ctx.save(); ctx.beginPath(); ctx.arc(CX,CY,SEGMENT_SIZE*1.8,0,Math.PI*2); ctx.strokeStyle='rgba(0,255,255,0.2)'; ctx.lineWidth=1.5; ctx.stroke(); ctx.restore(); ctx.restore(); 
+  
+  const secs=Math.floor(stwElapsed/1000), mins=Math.floor(secs/60);
   document.getElementById('stw-elapsed').textContent=`${mins}:${String(secs%60).padStart(2,'0')}`;
   document.getElementById('stw-player-len').textContent=stwPlayerSnake.length;
   if(stwMode==='bot'){
     document.getElementById('stw-rival-len').textContent=stwBotSnake?stwBotSnake.length:'—';
-    const rc=stwRivals.length;
-    document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
+    const rc=stwRivals.length; document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
   } else if (stwMode==='local') {
     document.getElementById('stw-rival-len').textContent=stwP2Snake?stwP2Snake.length:'—';
-    const rc=stwRivals.length;
-    document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
+    const rc=stwRivals.length; document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
   } else {
-    const rc=stwRivals.length;
-    document.getElementById('stw-rival-len').textContent=rc>0?stwRivals[0].length:'—';
-    document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
+    const rc=stwRivals.length; document.getElementById('stw-rival-len').textContent=rc>0?stwRivals[0].length:'—'; document.getElementById('stw-rival-count').textContent=rc>0?`${rc} RIVAL${rc>1?'S':''} ACTIVE`:'';
   }
+
   if(stwPlayerSnake.length<=STW_TARGET_LENGTH){ endSTWGame('p1'); return; }
   if(stwMode==='bot'&&stwBotSnake&&stwBotSnake.length<=STW_TARGET_LENGTH){ endSTWGame('bot'); return; }
   if(stwMode==='local'&&stwP2Snake&&stwP2Snake.length<=STW_TARGET_LENGTH){ endSTWGame('p2'); return; }
   stwAnimFrame=requestAnimationFrame(stwGameLoop);
 }
+
 function endSTWGame(winnerStr){
-  document.getElementById('btn-pause').classList.add('hidden');
-  cancelAnimationFrame(stwAnimFrame); stwAnimFrame=null; stwActive=false;
-  const totalMs=Date.now()-stwStartTime;
-  const secs=Math.floor(totalMs/1000);
-  const mins=Math.floor(secs/60);
-  const timeStr=`${mins}:${String(secs%60).padStart(2,'0')}`;
-  const prevBest=stwBestTime;
+  document.getElementById('btn-pause').classList.add('hidden'); cancelAnimationFrame(stwAnimFrame); stwAnimFrame=null; stwActive=false;
+  const totalMs=Date.now()-stwStartTime, secs=Math.floor(totalMs/1000), mins=Math.floor(secs/60), timeStr=`${mins}:${String(secs%60).padStart(2,'0')}`, prevBest=stwBestTime;
   let playerWon = winnerStr === 'p1';
-  if(playerWon && totalMs < stwBestTime) {
-      stwBestTime = totalMs;
-      localStorage.setItem('stwBestTime', stwBestTime);
-  }
-  const bestSecs=Math.floor(stwBestTime/1000);
-  const bestMins=Math.floor(bestSecs/60);
-  const bestStr=stwBestTime===Infinity?'—':`${bestMins}:${String(bestSecs%60).padStart(2,'0')}`;
+  if(playerWon && totalMs < stwBestTime) { stwBestTime = totalMs; localStorage.setItem('stwBestTime', stwBestTime); }
+  const bestSecs=Math.floor(stwBestTime/1000), bestMins=Math.floor(bestSecs/60), bestStr=stwBestTime===Infinity?'—':`${bestMins}:${String(bestSecs%60).padStart(2,'0')}`;
   let statsHtml, winnerLabel, winClass;
   if(stwMode==='bot'){
-    winnerLabel=playerWon?'🌀 YOU WIN!':'🤖 BOT WINS!';
-    winClass=playerWon;
+    winnerLabel=playerWon?'🌀 YOU WIN!':'🤖 BOT WINS!'; winClass=playerWon;
     statsHtml=`<div>Winner</div><span>${playerWon?'You':'Bot'}</span><div>Match Duration</div><span>${timeStr}</span><div>Final Length</div><span>${stwPlayerSnake.length}</span><div>Shrink Food Collected</div><span>${stwPlayerSnake.foodEaten}</span>`;
   } else if(stwMode==='local'){
-    winnerLabel=playerWon?'P1 WINS!':'P2 WINS!';
-    winClass=true; 
+    winnerLabel=playerWon?'P1 WINS!':'P2 WINS!'; winClass=true; 
     statsHtml=`<div>Winner</div><span>${playerWon?'P1':'P2'}</span><div>Match Duration</div><span>${timeStr}</span><div>P1 Length</div><span>${stwPlayerSnake.length}</span><div>P2 Length</div><span>${stwP2Snake.length}</span>`;
   } else {
-    winnerLabel='🌀 COMPLETE!';
-    winClass=true;
-    const newBest=totalMs<prevBest&&playerWon;
+    winnerLabel='🌀 COMPLETE!'; winClass=true; const newBest=totalMs<prevBest&&playerWon;
     statsHtml=`<div>Completion Time</div><span>${timeStr}</span><div>Best Time</div><span>${bestStr}${newBest?' 🏆':''}</span><div>Final Length</div><span>${stwPlayerSnake.length}</span><div>Shrink Food Collected</div><span>${stwPlayerSnake.foodEaten}</span><div>Gravity Zone Hits</div><span>${stwGravityEncounters}</span><div>Rivals Outperformed</div><span>${stwRivalsOutperformed}</span>`;
   }
   showResultScreen(winnerLabel,winClass,statsHtml,'stw');
 }
+
 let lastGameMode='predator';
 function showResultScreen(label,playerWon,statsHtml,mode){
-  lastGameMode=mode;
-  const titleEl=document.getElementById('result-title');
-  titleEl.textContent=label;
+  lastGameMode=mode; const titleEl=document.getElementById('result-title'); titleEl.textContent=label;
   const cls=mode==='stw'&&!playerWon?'result-lose':playerWon?'result-win':'result-lose';
   titleEl.className='result-title '+(mode==='stw'&&label.includes('COMPLETE')?'result-neutral':cls);
-  document.getElementById('result-stats').innerHTML=statsHtml;
-  const btnChange=document.getElementById('btn-change');
-  if(mode==='stw'){
-    btnChange.textContent='CHANGE MODE';
-    btnChange.onclick=()=>showScreen('screen-stw-select');
-  } else {
-    btnChange.textContent='CHANGE SNAKE';
-    btnChange.onclick=handleChange;
-  }
+  document.getElementById('result-stats').innerHTML=statsHtml; const btnChange=document.getElementById('btn-change');
+  if(mode==='stw'){ btnChange.textContent='CHANGE MODE'; btnChange.onclick=()=>showScreen('screen-stw-select'); }
+  else { btnChange.textContent='CHANGE SNAKE'; btnChange.onclick=handleChange; }
   document.getElementById('btn-play-again').textContent='▶ PLAY AGAIN';
   showScreen('screen-result');
 }
 function handlePlayAgain(){
-  if(lastGameMode==='tailremoval') startTailRemoval();
-  else if(lastGameMode==='stw'){ showScreen('screen-stw-game'); startShrinkToWin(stwMode); }
-  else restartGame();
+  if(lastGameMode==='tailremoval') startTailRemoval(); else if(lastGameMode==='stw'){ showScreen('screen-stw-game'); startShrinkToWin(stwMode); } else restartGame();
 }
 function handleChange(){
-  if(lastGameMode==='tailremoval') {
-      document.getElementById('tr-select-details').classList.add('hidden');
-      document.getElementById('tr-select-type').classList.remove('hidden');
-      showScreen('screen-tr-select');
-  }
+  if(lastGameMode==='tailremoval') { document.getElementById('tr-select-details').classList.add('hidden'); document.getElementById('tr-select-type').classList.remove('hidden'); showScreen('screen-tr-select'); }
   else showScreen('screen-snake-select');
 }
-function setupJoysticks(){
-  setupJoy('joy-outer-l','joy-inner-l',inputDir1);
-  if(gameMode==='local') setupJoy('joy-outer-r','joy-inner-r',inputDir2);
-}
-function setupTRJoystick(){
-  setupJoy('tr-joy-outer-l','tr-joy-inner-l',trInputDir);
-  if(trGameMode==='local') setupJoy('tr-joy-outer-r','tr-joy-inner-r',trInputDir2);
-}
-function setupSTWJoystick(){
-  setupJoy('stw-joy-outer-l','stw-joy-inner-l',stwInputDir);
-  if(stwMode === 'local') setupJoy('stw-joy-outer-r','stw-joy-inner-r',stwInputDir2);
-}
+function setupJoysticks(){ setupJoy('joy-outer-l','joy-inner-l',inputDir1); if(gameMode==='local') setupJoy('joy-outer-r','joy-inner-r',inputDir2); }
+function setupTRJoystick(){ setupJoy('tr-joy-outer-l','tr-joy-inner-l',trInputDir); if(trGameMode==='local') setupJoy('tr-joy-outer-r','tr-joy-inner-r',trInputDir2); }
+function setupSTWJoystick(){ setupJoy('stw-joy-outer-l','stw-joy-inner-l',stwInputDir); if(stwMode === 'local') setupJoy('stw-joy-outer-r','stw-joy-inner-r',stwInputDir2); }
 function setupJoy(outId,innId,dir){
-  const outer=document.getElementById(outId);
-  const inner=document.getElementById(innId);
-  if(!outer||!inner) return;
+  const outer=document.getElementById(outId), inner=document.getElementById(innId); if(!outer||!inner) return;
   let active=false, tid=-1;
   outer.parentElement.addEventListener('touchstart',e=>{ active=true; tid=e.changedTouches[0].identifier; },{passive:true});
   document.addEventListener('touchmove',e=>{
     if(!active) return;
     for(const t of e.changedTouches){
       if(t.identifier!==tid) continue;
-      const rect=outer.getBoundingClientRect();
-      const dx=t.clientX-(rect.left+rect.width/2);
-      const dy=t.clientY-(rect.top+rect.height/2);
-      const d=Math.hypot(dx,dy)||0.01;
-      const max=rect.width/2-8;
+      const rect=outer.getBoundingClientRect(), dx=t.clientX-(rect.left+rect.width/2), dy=t.clientY-(rect.top+rect.height/2), d=Math.hypot(dx,dy)||0.01, max=rect.width/2-8;
       const cx=Math.min(d,max)*dx/d, cy=Math.min(d,max)*dy/d;
       inner.style.transform=`translate(calc(-50% + ${cx}px),calc(-50% + ${cy}px))`;
       dir.x=dx/d; dir.y=dir.y=dy/d; break;
     }
   },{passive:true});
   document.addEventListener('touchend',e=>{
-    for(const t of e.changedTouches){
-      if(t.identifier!==tid) continue;
-      active=false; dir.x=0; dir.y=0;
-      inner.style.transform='translate(-50%,-50%)'; break;
-    }
+    for(const t of e.changedTouches){ if(t.identifier!==tid) continue; active=false; dir.x=0; dir.y=0; inner.style.transform='translate(-50%,-50%)'; break; }
   });
 }
 function drawBg(){
   bgCtx.fillStyle='#060914'; bgCtx.fillRect(0,0,W,H);
   bgParticles.forEach(p=>{
-    p.x+=p.vx; p.y+=p.vy;
-    if(p.x<0) p.x=W; if(p.x>W) p.x=0;
-    if(p.y<0) p.y=H; if(p.y>H) p.y=0;
-    bgCtx.save(); bgCtx.globalAlpha=p.a;
-    bgCtx.beginPath(); bgCtx.arc(p.x,p.y,p.r,0,Math.PI*2);
-    bgCtx.fillStyle='#0af'; bgCtx.fill(); bgCtx.restore();
+    p.x+=p.vx; p.y+=p.vy; if(p.x<0) p.x=W; if(p.x>W) p.x=0; if(p.y<0) p.y=H; if(p.y>H) p.y=0;
+    bgCtx.save(); bgCtx.globalAlpha=p.a; bgCtx.beginPath(); bgCtx.arc(p.x,p.y,p.r,0,Math.PI*2); bgCtx.fillStyle='#0af'; bgCtx.fill(); bgCtx.restore();
   });
   const t=Date.now()/1000;
   for(let i=0;i<3;i++){
-    const r=80+i*60+Math.sin(t*.5+i)*20;
-    bgCtx.save(); bgCtx.globalAlpha=.03+Math.sin(t*.3+i)*.01;
-    bgCtx.beginPath(); bgCtx.arc(CX,CY,r,0,Math.PI*2);
-    bgCtx.strokeStyle='#0af'; bgCtx.lineWidth=1; bgCtx.stroke(); bgCtx.restore();
+    const r=80+i*60+Math.sin(t*.5+i)*20; bgCtx.save(); bgCtx.globalAlpha=.03+Math.sin(t*.3+i)*.01;
+    bgCtx.beginPath(); bgCtx.arc(CX,CY,r,0,Math.PI*2); bgCtx.strokeStyle='#0af'; bgCtx.lineWidth=1; bgCtx.stroke(); bgCtx.restore();
   }
 }
 initBgParticles();
