@@ -352,7 +352,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <li>First to reach length 1 wins!</li>
       <li><strong>Safe Chambers:</strong> Survive the Energy Storm every 15s. Find a glowing cyan chamber outside the arena or rapidly gain length while exposed! Only one snake per chamber.</li>
       <li><strong>Gate Arena:</strong> Expanding chambers open after 25s, locking for 12s on entry.</li>
-      <li><strong>Survival Chambers:</strong> Every 15s, one random gate opens for 7s. First to enter gets safety in the outside chamber. If both snakes stay inside, TWO futuristic cannons emerge to blast them for 10s (+4 length per hit).</li>
+      <li><strong>Survival Chambers:</strong> Every 15s, one random gate opens for 7s. First to enter gets safety in the outside chamber. If both snakes stay inside, TWO futuristic cannons emerge to blast them for 10s (+2 length per hit).</li>
       <h2>⚔️ MODE 2 — PREDATOR</h2>
       <p>Fight inside a circular arena. Play a Best-of-3 Round System.</p>
       <li>Hit opponent's body with your head to deal damage (−1 HP)</li>
@@ -382,6 +382,22 @@ canvas{display:block;position:absolute;top:0;left:0}
         <span style="color:#8af;font-size:13px;letter-spacing:2px">SCREEN SHAKE</span>
         <button class="diff-btn active" id="toggle-shake" onclick="toggleSetting('shake')">ON</button>
       </div>
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <span style="color:#8af;font-size:13px;letter-spacing:2px">BOUNDARY SOUND</span>
+        <button class="diff-btn active" id="toggle-soundBoundary" onclick="toggleSetting('soundBoundary')">ON</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <span style="color:#8af;font-size:13px;letter-spacing:2px">COLLISION SOUND</span>
+        <button class="diff-btn active" id="toggle-soundCollision" onclick="toggleSetting('soundCollision')">ON</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <span style="color:#8af;font-size:13px;letter-spacing:2px">CANNON SOUND</span>
+        <button class="diff-btn active" id="toggle-soundCannon" onclick="toggleSetting('soundCannon')">ON</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+        <span style="color:#8af;font-size:13px;letter-spacing:2px">MUSIC</span>
+        <button class="diff-btn active" id="toggle-music" onclick="toggleSetting('music')">ON</button>
+      </div>
     </div>
     <button class="btn btn-red" onclick="showScreen('screen-menu')">← BACK</button>
   </div>
@@ -389,6 +405,7 @@ canvas{display:block;position:absolute;top:0;left:0}
 <script>
 let audioCtx = null;
 function playCannonSound(cannonX, cannonY) {
+  if (!settings.soundCannon) return;
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -485,6 +502,7 @@ function playCannonSound(cannonX, cannonY) {
 }
 
 function playBoundaryHitSound(hitX, hitY) {
+  if (!settings.soundBoundary) return;
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -562,6 +580,7 @@ function playBoundaryHitSound(hitX, hitY) {
 }
 
 function playSnakeHitSound(hitX, hitY) {
+  if (!settings.soundCollision) return;
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if(audioCtx.state === 'suspended') audioCtx.resume();
@@ -671,16 +690,24 @@ function resize() {
 resize();
 window.addEventListener('resize',()=>{ resize(); if(gameActive) initPositions(); });
 
-const settings = { particles:true, shake:true };
+const settings = { particles:true, shake:true, soundBoundary:true, soundCollision:true, soundCannon:true, music:true };
 function toggleSetting(k){
   settings[k]=!settings[k];
   document.getElementById('toggle-'+k).textContent=settings[k]?'ON':'OFF';
   document.getElementById('toggle-'+k).classList.toggle('active',settings[k]);
+  if(k === 'music') {
+    if(settings.music) {
+       startMenuMusic();
+    } else {
+       stopMenuMusic();
+    }
+  }
 }
 
 const GAME_SCREENS = new Set(['screen-game','screen-tr-game','screen-stw-game']);
 const mainTheme = document.getElementById('main-music');
 function startMenuMusic() {
+  if (!settings.music) return;
   if (!GAME_SCREENS.has(currentScreen) && currentScreen !== 'screen-result' && mainTheme.paused) {
     mainTheme.play().catch(e => {
         console.warn("Browser prevented audio autoplay. Interaction required.", e);
@@ -802,7 +829,7 @@ function showAboutMode() {
   } else if (trActive && trVariant === 'gate') {
     box.innerHTML = `<h2>🚪 MODE 1 — TAIL REMOVAL (GATE ARENA)</h2><p>Tail Removal rules apply, but with expanding chambers!</p><li>Gates open after 25 seconds.</li><li>Find the green food in one of the 4 chambers.</li><li>Entering a chamber starts a 12-second lockdown timer.</li><li>If caught in a chamber or gate when it closes, you are safely teleported to the center.</li>`;
   } else if (trActive && trVariant === 'survival') {
-    box.innerHTML = `<h2>⏳ MODE 1 — TAIL REMOVAL (SURVIVAL)</h2><p>Every 15s, one random gate opens for 7s.</p><li>First to enter gains safety inside the outer chamber.</li><li>If both snakes stay inside, TWO futuristic cannons emerge to blast them for 10s (+4 length per hit).</li><li>Classic Tail Removal continues during the attack!</li>`;
+    box.innerHTML = `<h2>⏳ MODE 1 — TAIL REMOVAL (SURVIVAL)</h2><p>Every 15s, one random gate opens for 7s.</p><li>First to enter gains safety inside the outer chamber.</li><li>If both snakes stay inside, TWO futuristic cannons emerge to blast them for 10s (+2 length per hit).</li><li>Classic Tail Removal continues during the attack!</li>`;
   } else if (stwActive) {
     box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li><li>Hurdles appear randomly for a brief duration followed by a wait.</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
   }
@@ -1821,7 +1848,7 @@ function trGameLoop(){
                       
                       if (dist <= speed + SEGMENT_SIZE + 6) {
                           p.alive = false;
-                          p.target.setLength(p.target.length + 4);
+                          p.target.setLength(p.target.length + 2);
                           addParticles(head.x, head.y, '#0af', 20);
                           triggerShake();
                       } else {
