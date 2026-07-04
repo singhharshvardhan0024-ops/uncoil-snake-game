@@ -77,11 +77,17 @@ canvas{display:block;position:absolute;top:0;left:0}
 .gravity-zone-indicator{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:3px;color:#f0a;pointer-events:none;animation:blink 0.6s infinite}
 </style></head>
 <body>
-<audio id="main-music" src="Main_theme.mp3" loop autoplay preload="auto"></audio>
+<audio id="main-music" src="Main_theme.mp3" loop preload="auto"></audio>
 <canvas id="bg"></canvas>
 <canvas id="game"></canvas>
 <div id="ui">
-  <button id="btn-pause" class="btn hidden" onclick="pauseGame()" style="position:absolute; top:8px; left:50%; transform:translateX(-50%); z-index:100; padding:6px 20px; font-size:12px; font-weight:bold; background:rgba(6,9,20,0.85); backdrop-filter:blur(4px); border-radius:4px; box-shadow:0 0 10px #0af4;">⏸ PAUSE</button>
+  <div id="top-center-hud" style="position:absolute; top:12px; left:0; width:100%; display:flex; flex-direction:column; align-items:center; z-index:150; pointer-events:none;">
+    <button id="btn-pause" class="btn hidden" onclick="pauseGame()" style="pointer-events:auto; padding:8px 24px; font-size:13px; font-weight:bold; background:rgba(6,9,20,0.85); backdrop-filter:blur(4px); border-radius:4px; box-shadow:0 0 10px #0af4; display:flex; align-items:center; justify-content:center; gap:8px; margin:0 0 8px 0; border: 1px solid #0af; color:#0af; cursor:pointer; letter-spacing:2px; transition:all 0.2s;">
+      <svg width="10" height="12" viewBox="0 0 10 12" fill="#0af"><rect x="1" y="0" width="3" height="12"/><rect x="6" y="0" width="3" height="12"/></svg>
+      <span style="line-height:1; margin-top:2px;">PAUSE</span>
+    </button>
+    <div id="predator-round-label" class="hidden" style="font-size:14px; color:#0af; letter-spacing:4px; font-weight:bold; margin-right:-4px; text-align:center;">ROUND 1</div>
+  </div>
 
   <div id="screen-pause" class="screen hidden" style="background:rgba(6,9,20,0.92); z-index:200;">
     <div class="neon-title" style="font-size:clamp(24px,5vw,48px)">PAUSED</div>
@@ -99,7 +105,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="neon-title">SURRP</div>
     <div class="subtitle">SERPENT BATTLE ARENA</div>
     <div class="menu-group">
-      <button class="btn" onclick="showScreen('screen-modes')">⚡ PLAY</button>
+      <button class="btn" onclick="startMenuMusic(); showScreen('screen-modes')">⚡ PLAY</button>
       <button class="btn" onclick="showScreen('screen-instructions')">INSTRUCTIONS</button>
       <button class="btn" onclick="showScreen('screen-settings')">SETTINGS</button>
     </div>
@@ -111,7 +117,7 @@ canvas{display:block;position:absolute;top:0;left:0}
       <button class="btn" onclick="showScreen('screen-tr-modes')">✂️ MODE 1 <span style="font-size:10px;opacity:.6">TAIL REMOVAL</span></button>
       <button class="btn" onclick="showScreen('screen-predator-modes')">⚔️ MODE 2 <span style="font-size:10px;opacity:.6">PREDATOR</span></button>
       <button class="btn" onclick="showScreen('screen-stw-modes')">🌀 MODE 3 <span style="font-size:10px;opacity:.6">SHRINK TO WIN</span></button>
-      <button class="btn btn-red" onclick="showScreen('screen-menu')">← BACK</button>
+      <button class="btn btn-red" onclick="showScreen('screen-modes')">← BACK</button>
     </div>
   </div>
 
@@ -157,7 +163,7 @@ canvas{display:block;position:absolute;top:0;left:0}
         <div class="mode-row">
         <div class="snake-card" id="tr-card-small" onclick="trSelectSnake('small')">
             <h3>⚡ SPECTER</h3>
-            <div style="font-size:11px;color:#0af;margin-top:6px">Cyan · Agile</div>
+            <div style="font-size:11px;color:#0af;margin-top:6px">Yellow · Agile</div>
         </div>
         <div class="snake-card" id="tr-card-big" onclick="trSelectSnake('big')">
             <h3>💥 LEVIATHAN</h3>
@@ -213,7 +219,7 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div class="mode-row">
       <div class="snake-card" id="stw-card-small" onclick="stwSelectSnake('small')">
         <h3>⚡ SPECTER</h3>
-        <div style="font-size:11px;color:#0af;margin-top:6px">Cyan · Agile</div>
+        <div style="font-size:11px;color:#0af;margin-top:6px">Yellow · Agile</div>
       </div>
       <div class="snake-card" id="stw-card-big" onclick="stwSelectSnake('big')">
         <h3>💥 LEVIATHAN</h3>
@@ -255,10 +261,6 @@ canvas{display:block;position:absolute;top:0;left:0}
         <div class="hbar-hp" id="hp-text-p2">15/15</div>
         <div style="font-size:11px; color:#8af; letter-spacing:2px; margin-top:2px;">WINS: <span id="p2-wins-text" style="color:#fff">0</span></div>
       </div>
-    </div>
-
-    <div id="predator-round-hud" style="position:absolute; top:65px; width:100%; text-align:center; pointer-events:none;">
-      <div id="predator-round-label" style="font-size:14px; color:#0af; letter-spacing:4px; font-weight:bold;">ROUND 1</div>
     </div>
 
     <div id="predator-transition" class="hidden" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); text-align:center; z-index:100; background:rgba(6,9,20,0.9); padding:30px 50px; border:1px solid #0af; border-radius:8px; box-shadow:0 0 20px rgba(0,170,255,0.4);">
@@ -310,16 +312,16 @@ canvas{display:block;position:absolute;top:0;left:0}
     <div id="stw-hud">
       <div class="stw-box">
         <div class="stw-label">🐍 YOUR LENGTH</div>
-        <div class="stw-len" id="stw-player-len">120</div>
+        <div class="stw-len" id="stw-player-len">150</div>
         <div class="stw-target" id="stw-target-label">TARGET: 1</div>
       </div>
       <div class="stw-box" id="stw-box-right" style="align-items:flex-end">
         <div class="stw-label" id="stw-rival-label">🤖 RIVAL</div>
-        <div class="stw-len" style="color:#f0a;text-shadow:0 0 12px #f04" id="stw-rival-len">120</div>
+        <div class="stw-len" style="color:#f0a;text-shadow:0 0 12px #f04" id="stw-rival-len">150</div>
         <div class="stw-target" style="color:#f04" id="stw-rival-count"></div>
       </div>
     </div>
-    <div id="stw-top-center" style="position:absolute; top:65px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:150; pointer-events:none; width:100%;">
+    <div id="stw-top-center" style="position:absolute; top:75px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:150; pointer-events:none; width:100%;">
       <div id="stw-elapsed" style="font-size:24px; font-weight:900; color:#0ff; text-shadow:0 0 10px #0af; letter-spacing:2px;">0:00</div>
       <div id="stw-event-label" class="hidden" style="font-size:12px; font-weight:bold; letter-spacing:2px; color:#f0a; animation:blink 0.8s infinite; margin-top:4px;">⚡ EVENT</div>
     </div>
@@ -359,11 +361,11 @@ canvas{display:block;position:absolute;top:0;left:0}
       <h2>🌀 MODE 3 — SHRINK TO WIN</h2>
       <p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p>
       <li>Gravity Zones 🌀 teleport you instantly — avoid them!</li>
-      <li>Black Holes 🕳️ directly trap you in an orbit and pull you in — wait them out!</li>
+      <li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li>
       <li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li>
       <li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li>
       <li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li>
-      <li>Hurdles alternate, appearing for a brief duration followed by a wait</li>
+      <li>Hurdles appear randomly for a brief duration followed by a wait.</li>
       <li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>
     </div>
     <button class="btn" style="margin-top:20px" onclick="showScreen('screen-menu')">← BACK</button>
@@ -385,6 +387,268 @@ canvas{display:block;position:absolute;top:0;left:0}
   </div>
 </div>
 <script>
+let audioCtx = null;
+function playCannonSound(cannonX, cannonY) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+
+    // 3D Positional Audio Panning
+    const panNode = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : audioCtx.createGain();
+    if (panNode.pan) {
+        let panVal = cannonX ? ((cannonX - CX) / (W/2)) : 0;
+        panVal = Math.max(-1, Math.min(1, panVal));
+        panNode.pan.value = panVal;
+    }
+    
+    // Master volume control
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.6; 
+    masterGain.connect(panNode);
+    panNode.connect(audioCtx.destination);
+
+    // 1. Photon Charge (0 - 50ms)
+    const chargeOsc = audioCtx.createOscillator();
+    const chargeGain = audioCtx.createGain();
+    chargeOsc.type = 'sine';
+    chargeOsc.frequency.setValueAtTime(600, now);
+    chargeOsc.frequency.exponentialRampToValueAtTime(3000, now + 0.05);
+    chargeGain.gain.setValueAtTime(0, now);
+    chargeGain.gain.linearRampToValueAtTime(0.4, now + 0.04);
+    chargeGain.gain.linearRampToValueAtTime(0, now + 0.05); 
+    chargeOsc.connect(chargeGain);
+    chargeGain.connect(masterGain);
+    chargeOsc.start(now);
+    chargeOsc.stop(now + 0.06);
+
+    // 2. Crystal Energy Pulse (Attack) (50 - 150ms)
+    const pulseOsc = audioCtx.createOscillator();
+    const pulseGain = audioCtx.createGain();
+    pulseOsc.type = 'triangle';
+    pulseOsc.frequency.setValueAtTime(4000, now + 0.05);
+    pulseOsc.frequency.exponentialRampToValueAtTime(400, now + 0.15);
+    
+    pulseGain.gain.setValueAtTime(0, now + 0.04);
+    pulseGain.gain.setValueAtTime(0.8, now + 0.05);
+    pulseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    
+    pulseOsc.connect(pulseGain);
+    pulseGain.connect(masterGain);
+    pulseOsc.start(now + 0.05);
+    pulseOsc.stop(now + 0.2);
+
+    // 3. Deep Controlled Bass Impact (50 - 300ms)
+    const bassOsc = audioCtx.createOscillator();
+    const bassGain = audioCtx.createGain();
+    bassOsc.type = 'sine';
+    bassOsc.frequency.setValueAtTime(200, now + 0.05);
+    bassOsc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+    bassGain.gain.setValueAtTime(0, now + 0.04);
+    bassGain.gain.setValueAtTime(0.9, now + 0.05);
+    bassGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+    bassOsc.connect(bassGain);
+    bassGain.connect(masterGain);
+    bassOsc.start(now + 0.05);
+    bassOsc.stop(now + 0.35);
+
+    // 4. Smooth Photon Trail / Shimmer (50 - 350ms)
+    const noiseBufferSize = audioCtx.sampleRate * 0.3;
+    const noiseBuffer = audioCtx.createBuffer(1, noiseBufferSize, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseBufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+    }
+    const noiseSrc = audioCtx.createBufferSource();
+    noiseSrc.buffer = noiseBuffer;
+    
+    const noiseFilter = audioCtx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.setValueAtTime(6000, now + 0.05);
+    noiseFilter.frequency.exponentialRampToValueAtTime(500, now + 0.3);
+    noiseFilter.Q.value = 8; // High resonance for crystal/laser tone
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0, now + 0.04);
+    noiseGain.gain.setValueAtTime(0.6, now + 0.05);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+    noiseSrc.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noiseSrc.start(now + 0.05);
+    noiseSrc.stop(now + 0.35);
+
+  } catch (e) {
+    console.warn("Cannon sound error", e);
+  }
+}
+
+function playBoundaryHitSound(hitX, hitY) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+
+    const panNode = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : audioCtx.createGain();
+    if (panNode.pan) {
+        let panVal = hitX ? ((hitX - CX) / (W/2)) : 0;
+        panNode.pan.value = Math.max(-1, Math.min(1, panVal));
+    }
+    
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.45; // balanced level
+    masterGain.connect(panNode);
+    panNode.connect(audioCtx.destination);
+
+    // 1. Plasma Spark (High frequency zap)
+    const sparkOsc = audioCtx.createOscillator();
+    const sparkGain = audioCtx.createGain();
+    sparkOsc.type = 'square';
+    sparkOsc.frequency.setValueAtTime(3000, now);
+    sparkOsc.frequency.exponentialRampToValueAtTime(500, now + 0.1);
+    
+    const sparkFilter = audioCtx.createBiquadFilter();
+    sparkFilter.type = 'bandpass';
+    sparkFilter.frequency.setValueAtTime(4000, now);
+    sparkFilter.frequency.exponentialRampToValueAtTime(1000, now + 0.1);
+    sparkFilter.Q.value = 3;
+
+    sparkGain.gain.setValueAtTime(0, now);
+    sparkGain.gain.setValueAtTime(0.5, now + 0.01);
+    sparkGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    
+    sparkOsc.connect(sparkFilter);
+    sparkFilter.connect(sparkGain);
+    sparkGain.connect(masterGain);
+    sparkOsc.start(now);
+    sparkOsc.stop(now + 0.2);
+
+    // 2. Force Field Ripple (Modulated Triangle wave)
+    const rippleOsc = audioCtx.createOscillator();
+    const rippleGain = audioCtx.createGain();
+    rippleOsc.type = 'triangle';
+    rippleOsc.frequency.setValueAtTime(600, now);
+    rippleOsc.frequency.exponentialRampToValueAtTime(200, now + 0.2);
+    
+    rippleGain.gain.setValueAtTime(0, now);
+    rippleGain.gain.setValueAtTime(0.6, now + 0.02);
+    rippleGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    
+    rippleOsc.connect(rippleGain);
+    rippleGain.connect(masterGain);
+    rippleOsc.start(now);
+    rippleOsc.stop(now + 0.25);
+
+    // 3. Bass Punch (Deep weight)
+    const bassOsc = audioCtx.createOscillator();
+    const bassGain = audioCtx.createGain();
+    bassOsc.type = 'sine';
+    bassOsc.frequency.setValueAtTime(120, now);
+    bassOsc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+    
+    bassGain.gain.setValueAtTime(0, now);
+    bassGain.gain.setValueAtTime(0.8, now + 0.02);
+    bassGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    
+    bassOsc.connect(bassGain);
+    bassGain.connect(masterGain);
+    bassOsc.start(now);
+    bassOsc.stop(now + 0.25);
+
+  } catch (e) {
+    console.warn("Boundary sound error", e);
+  }
+}
+
+function playSnakeHitSound(hitX, hitY) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+
+    const panNode = audioCtx.createStereoPanner ? audioCtx.createStereoPanner() : audioCtx.createGain();
+    if (panNode.pan) {
+        let panVal = hitX ? ((hitX - CX) / (W/2)) : 0;
+        panNode.pan.value = Math.max(-1, Math.min(1, panVal));
+    }
+    
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.5; 
+    masterGain.connect(panNode);
+    panNode.connect(audioCtx.destination);
+
+    // 1. Sharp EM Impact / Bright Energy Crack
+    const crackOsc = audioCtx.createOscillator();
+    const crackGain = audioCtx.createGain();
+    crackOsc.type = 'square';
+    crackOsc.frequency.setValueAtTime(2500, now);
+    crackOsc.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+    
+    const crackFilter = audioCtx.createBiquadFilter();
+    crackFilter.type = 'bandpass';
+    crackFilter.frequency.setValueAtTime(3000, now);
+    crackFilter.frequency.exponentialRampToValueAtTime(500, now + 0.15);
+    crackFilter.Q.value = 5;
+
+    crackGain.gain.setValueAtTime(0, now);
+    crackGain.gain.setValueAtTime(0.7, now + 0.01);
+    crackGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+    
+    crackOsc.connect(crackFilter);
+    crackFilter.connect(crackGain);
+    crackGain.connect(masterGain);
+    crackOsc.start(now);
+    crackOsc.stop(now + 0.2);
+
+    // 2. Deep Cinematic Bass Punch
+    const bassOsc = audioCtx.createOscillator();
+    const bassGain = audioCtx.createGain();
+    bassOsc.type = 'sine';
+    bassOsc.frequency.setValueAtTime(180, now);
+    bassOsc.frequency.exponentialRampToValueAtTime(30, now + 0.2);
+    
+    bassGain.gain.setValueAtTime(0, now);
+    bassGain.gain.setValueAtTime(1.0, now + 0.01);
+    bassGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+    
+    bassOsc.connect(bassGain);
+    bassGain.connect(masterGain);
+    bassOsc.start(now);
+    bassOsc.stop(now + 0.3);
+
+    // 3. Compressed Plasma Burst (Filtered Noise)
+    const noiseBufferSize = audioCtx.sampleRate * 0.2;
+    const noiseBuffer = audioCtx.createBuffer(1, noiseBufferSize, audioCtx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseBufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+    }
+    const noiseSrc = audioCtx.createBufferSource();
+    noiseSrc.buffer = noiseBuffer;
+    
+    const noiseFilter = audioCtx.createBiquadFilter();
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.setValueAtTime(6000, now);
+    noiseFilter.frequency.exponentialRampToValueAtTime(300, now + 0.2);
+    noiseFilter.Q.value = 3;
+
+    const noiseGain = audioCtx.createGain();
+    noiseGain.gain.setValueAtTime(0, now);
+    noiseGain.gain.setValueAtTime(0.6, now + 0.02);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+    noiseSrc.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noiseSrc.start(now);
+    noiseSrc.stop(now + 0.25);
+
+  } catch (e) {
+    console.warn("Snake hit sound error", e);
+  }
+}
+
 const arenaImage = new Image();
 arenaImage.src = 'hud_border.png';
 const BG = document.getElementById('bg');
@@ -401,7 +665,7 @@ function resize() {
   RADIUS = Math.min(W,H)*0.42;
   PREDATOR_RADIUS = ((RADIUS * 1.161572) * 1.25) * Math.sqrt(0.85);
   TR_RADIUS = RADIUS * 1.11803398875;
-  current_TR_RADIUS = TR_RADIUS; 
+  current_TR_RADIUS = TR_RADIUS * 1.25; 
   STW_RADIUS = Math.min(W,H)*0.88;
 }
 resize();
@@ -427,10 +691,6 @@ function stopMenuMusic() {
   mainTheme.pause();
   mainTheme.currentTime = 0;
 }
-window.addEventListener('load', () => startMenuMusic());
-document.addEventListener('click', startMenuMusic);
-document.addEventListener('keydown', startMenuMusic);
-document.addEventListener('touchstart', startMenuMusic, {passive: true});
 
 let currentScreen = 'screen-menu';
 let isPaused = false, pauseStartTime = 0;
@@ -459,12 +719,12 @@ function showScreen(id){
   if(!GAME_SCREENS.has(id)){
     gameActive = trActive = stwActive = isPaused = false;
     document.getElementById('btn-pause').classList.add('hidden');
+    document.getElementById('predator-round-label').classList.add('hidden');
     if(animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
     if(trAnimFrame) { cancelAnimationFrame(trAnimFrame); trAnimFrame = null; }
     if(stwAnimFrame) { cancelAnimationFrame(stwAnimFrame); stwAnimFrame = null; }
     ctx.clearRect(0, 0, W, H);
     particles = [];
-    startMenuMusic();
   }
 }
 
@@ -544,7 +804,7 @@ function showAboutMode() {
   } else if (trActive && trVariant === 'survival') {
     box.innerHTML = `<h2>⏳ MODE 1 — TAIL REMOVAL (SURVIVAL)</h2><p>Every 15s, one random gate opens for 7s.</p><li>First to enter gains safety inside the outer chamber.</li><li>If both snakes stay inside, TWO futuristic cannons emerge to blast them for 10s (+4 length per hit).</li><li>Classic Tail Removal continues during the attack!</li>`;
   } else if (stwActive) {
-    box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li><li>Hurdles alternate, appearing for a brief duration followed by a wait</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
+    box.innerHTML = `<h2>🌀 MODE 3 — SHRINK TO WIN</h2><p>Race in a larger arena! Camera follows your snake like Slither.io. Collect shrink food to reduce your length. First to reach length 1 wins (Bot mode) or aim for fastest time (Self mode).</p><li>Gravity Zones 🌀 teleport you instantly — avoid them!</li><li>Black Holes 🕳️ directly trap you in an orbit and prevent you from eating — wait them out!</li><li>Enemy Hunters 👹 actively chase you down! Getting hit adds +10 to your length.</li><li>Slower 🐌 slows your snake down for 5 seconds.</li><li>Rival snakes compete for the same food — be quick!</li><li>Slipo ✨ temporarily coats serpents in silver, making food run away if approached from the front!</li><li>Hurdles appear randomly for a brief duration followed by a wait.</li><li>Pulito Black Anomaly 🌪️ behaves like a living black hole, pulling all food toward it — survive the void!</li>`;
   }
 }
 
@@ -597,7 +857,7 @@ function setDiff(d,btn){
 
 const SEGMENT_SIZE=8;
 const SNAKE_CONFIGS={
-  small:{ length:54, speed:4.3, turnSpeed:0.07, color:'#0ff', glow:'#0af', hp:15, dmg:1 },
+  small:{ length:54, speed:4.3, turnSpeed:0.07, color:'#ff0', glow:'#fa0', hp:15, dmg:1 },
   big:  { length:54, speed:4.3, turnSpeed:0.07, color:'#f0a', glow:'#f04', hp:15, dmg:1 }
 };
 const predatorCam = { x: 0, y: 0 };
@@ -631,7 +891,7 @@ function renderSnakeBody(ctx, snake) {
     if(ctx.ellipse) ctx.ellipse(headX, headY, headR * 1.6, headR * (isPink ? 0.4 : 0.6), snake.angle + (isPink ? 0.15 : 0), 0, Math.PI*2);
     else ctx.arc(headX, headY, headR * 1.2, 0, Math.PI*2);
     let ringColor = '#ffffff';
-    if(snake.color === '#0ff') ringColor = '#88ffff';
+    if(snake.color === '#ff0') ringColor = '#ffff88';
     if(snake.color === '#f0a') ringColor = '#ff88ff';
     if(snake.color === '#ff6b35') ringColor = '#ffaa88';
     if(slipoActive) ringColor = '#ffffff';
@@ -671,6 +931,7 @@ class Snake {
       const pushAngle=Math.atan2(CY-ny,CX-nx);
       this.angle=pushAngle+(Math.random()-.5)*0.5;
       nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
+      if (this.wallSlowTimer <= 0) playBoundaryHitSound(this.x, this.y);
       this.wallSlowTimer=30; addParticles(this.x,this.y,this.color,6);
       if (gameActive && predDangerPhaseActive && this.boundaryHitCooldown <= 0) {
           this.hp--; this.boundaryHitCooldown = 30; triggerShake();
@@ -815,9 +1076,13 @@ function initPositions(){
   bot.reset(); bot.wanderAngle=Math.atan2(CY-snake2.y,CX-snake2.x)+Math.PI;
 }
 function startGame(){
+  document.getElementById('predator-round-label').classList.remove('hidden');
   showScreen('screen-game'); stopMenuMusic(); initBgParticles(); predRound = 1; predP1Wins = 0; predP2Wins = 0; startPredatorRound();
 }
-function restartGame(){ showScreen('screen-game'); predRound = 1; predP1Wins = 0; predP2Wins = 0; startPredatorRound(); }
+function restartGame(){ 
+  document.getElementById('predator-round-label').classList.remove('hidden');
+  showScreen('screen-game'); predRound = 1; predP1Wins = 0; predP2Wins = 0; startPredatorRound(); 
+}
 
 function startPredatorRound() {
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
@@ -878,7 +1143,9 @@ function checkHit(attacker,defender){
       const knockback = 30, kx = (dx / dist) * knockback, ky = (dy / dist) * knockback;
       attacker.x += kx; attacker.y += ky;
       for (let j = 0; j < attacker.segments.length; j++) { attacker.segments[j].x += kx; attacker.segments[j].y += ky; }
-      attacker.wallSlowTimer = 20; triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
+      attacker.wallSlowTimer = 20; 
+      playSnakeHitSound(s.x, s.y);
+      triggerShake(); addParticles(s.x,s.y,attacker.color,20); updateHpBars();
       if(defender===snake2&&gameMode==='bot') onBotHit();
       if(defender.hp<=0 && !finalSlowMo){ finalSlowMo=true; finalSlowMoFrames=90; }
       break;
@@ -921,6 +1188,7 @@ function handleRoundEnd() {
 }
 function endPredatorMatch() {
   document.getElementById('predator-transition').classList.add('hidden');
+  document.getElementById('predator-round-label').classList.add('hidden');
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
   gameActive=false;
   const p1WinsMatch = predP1Wins === 2;
@@ -1020,7 +1288,7 @@ function drawArena(){
 
     if (survivalState === 'cannon' && survivalCannons.length > 0) {
         survivalCannons.forEach(cannon => {
-            let prog = cannon.emergeProgress;
+            let prog = Math.max(0.001, cannon.emergeProgress);
             let cX = CX + Math.cos(cannon.angle) * current_TR_RADIUS * 0.89;
             let cY = CY + Math.sin(cannon.angle) * current_TR_RADIUS * 0.89;
             let targetX = cannon.target ? cannon.target.x : CX;
@@ -1226,7 +1494,7 @@ const trCam = { x: 0, y: 0 }, TR_CAM_LERP = 0.08;
 class TRSnake {
   constructor(cfg,x,y,angle,isBot){
     this.x=x; this.y=y; this.angle=angle; this.isBot=isBot; this.speed=4.3; this.turnSpeed=cfg.turnSpeed||0.07;
-    this.color=isBot?'#f0a':'#0ff'; this.glow=isBot?'#f04':'#0af';
+    this.color=isBot?'#f0a':'#ff0'; this.glow=isBot?'#f04':'#fa0';
     this.length=TR_INIT_LENGTH; this.segments=[]; this.hitCooldown=0; this.wallSlowTimer=0; this.alive=true; this.foodEaten=0; this.lastGrowthTime=0;
     for(let i=0;i<TR_INIT_LENGTH;i++) this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
@@ -1251,6 +1519,7 @@ class TRSnake {
           let pushAngle = Math.atan2(pushRes.cy - ny, pushRes.cx - nx);
           this.angle = pushAngle + (Math.random()-.5)*0.4;
           nx = this.x + Math.cos(this.angle)*spd; ny = this.y + Math.sin(this.angle)*spd;
+          if (this.wallSlowTimer <= 0) playBoundaryHitSound(this.x, this.y);
           this.wallSlowTimer = 25;
       }
     } else if (trVariant === 'survival') {
@@ -1259,6 +1528,7 @@ class TRSnake {
           let pushAngle = Math.atan2(pushRes.cy - ny, pushRes.cx - nx);
           this.angle = pushAngle + (Math.random()-.5)*0.4;
           nx = this.x + Math.cos(this.angle)*spd; ny = this.y + Math.sin(this.angle)*spd;
+          if (this.wallSlowTimer <= 0) playBoundaryHitSound(this.x, this.y);
           this.wallSlowTimer = 25;
       }
     } else if (trVariant === 'safe') {
@@ -1267,6 +1537,7 @@ class TRSnake {
           let pushAngle = Math.atan2(pushRes.cy - ny, pushRes.cx - nx);
           this.angle = pushAngle + (Math.random()-.5)*0.4;
           nx = this.x + Math.cos(this.angle)*spd; ny = this.y + Math.sin(this.angle)*spd;
+          if (this.wallSlowTimer <= 0) playBoundaryHitSound(this.x, this.y);
           this.wallSlowTimer = 25;
       }
     } else if (trVariant === 'classic') {
@@ -1275,6 +1546,7 @@ class TRSnake {
         const pushAngle=Math.atan2(CY-ny,CX-nx);
         this.angle=pushAngle+(Math.random()-.5)*0.4;
         nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
+        if (this.wallSlowTimer <= 0) playBoundaryHitSound(this.x, this.y);
         this.wallSlowTimer=25;
       }
     }
@@ -1323,9 +1595,11 @@ let trInputDir={x:0,y:0}, trInputDir2={x:0,y:0};
 const trBot={ actionFrame:0, lastDecisionFrame:0, targetFood:null, reactionDelay:0, lastFoodSeen:null };
 
 function startTailRemoval(){
+  document.getElementById('predator-round-label').classList.add('hidden');
   showScreen('screen-tr-game'); stopMenuMusic();
   document.getElementById('btn-pause').removeProperty ? document.getElementById('btn-pause').classList.remove('hidden') : document.getElementById('btn-pause').className = "btn";
   current_TR_RADIUS = (trVariant === 'gate' || trVariant === 'survival') ? TR_RADIUS * 1.25 : (trVariant === 'safe' ? TR_RADIUS * 1.20 : TR_RADIUS);
+  current_TR_RADIUS = TR_RADIUS * 1.25; // Force all modes to use Gate Arena radius size
   document.getElementById('food-timer-wrap').classList.remove('hidden');
   const p1Name = trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN';
   const p2Name = trGameMode==='local'?(trP2Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN'):(trP2Type==='small'?'🤖 SPECTER BOT':'🤖 LEVIATHAN BOT');
@@ -1336,8 +1610,8 @@ function startTailRemoval(){
   trSnake1=new TRSnake({turnSpeed:0.07},CX+Math.cos(a1)*r,CY+Math.sin(a1)*r,a2+.3,false);
   const p2Turn=trGameMode==='local'?0.07:dc.turnSpeed;
   trSnake2=new TRSnake({turnSpeed:p2Turn},CX+Math.cos(a2)*r,CY+Math.sin(a2)*r,a1-.3,trGameMode==='bot');
-  trSnake1.color=trP1Type==='small'?'#0ff':'#f0a'; trSnake1.glow=trP1Type==='small'?'#0af':'#f04';
-  trSnake2.color=trP2Type==='small'?'#0ff':'#f0a'; trSnake2.glow=trP2Type==='small'?'#0af':'#f04';
+  trSnake1.color=trP1Type==='small'?'#ff0':'#f0a'; trSnake1.glow=trP1Type==='small'?'#fa0':'#f04';
+  trSnake2.color=trP2Type==='small'?'#ff0':'#f0a'; trSnake2.glow=trP2Type==='small'?'#fa0':'#f04';
   document.getElementById('tr-p1-name').style.color = trSnake1.color; document.getElementById('tr-p2-name').style.color = trSnake2.color;
   document.getElementById('tr-p1-len').style.color = trSnake1.color; document.getElementById('tr-p2-len').style.color = trSnake2.color;
   document.getElementById('tr-p1-len').style.textShadow = `0 0 12px ${trSnake1.glow}`; document.getElementById('tr-p2-len').style.textShadow = `0 0 12px ${trSnake2.glow}`;
@@ -1414,7 +1688,10 @@ function checkChamberEntry() {
                 if (angleDiff < (c.pathWidth/2)/current_TR_RADIUS * 1.5) {
                      if (!c.occupiedBy) {
                          let alreadyIn = scChambers.some(oc => oc.occupiedBy === s);
-                         if(!alreadyIn) c.occupiedBy = s;
+                         if(!alreadyIn) {
+                             c.occupiedBy = s;
+                             playBoundaryHitSound(s.x, s.y);
+                         }
                      }
                 }
             }
@@ -1520,35 +1797,45 @@ function trGameLoop(){
               survivalOutsideSnake = null; survivalInsideSnake = null; survivalCannons = []; survivalProjectiles = [];
           } else {
               survivalCannons.forEach(cannon => {
-                  if (cannon.emergeProgress < 1) cannon.emergeProgress += 0.05;
-                  if (now - cannon.lastFire > 800 && cannon.emergeProgress >= 1) {
+                  let prog = Math.max(0.001, cannon.emergeProgress);
+                  if (prog < 1) cannon.emergeProgress += 0.05;
+                  if (now - cannon.lastFire > 800 && prog >= 1) {
                       cannon.lastFire = now;
                       let cx = CX + Math.cos(cannon.angle) * current_TR_RADIUS * 0.89;
                       let cy = CY + Math.sin(cannon.angle) * current_TR_RADIUS * 0.89;
-                      let dist = Math.hypot(cannon.target.x - cx, cannon.target.y - cy);
-                      let lead = dist / 6.0;
-                      let tx = cannon.target.x + Math.cos(cannon.target.angle) * cannon.target.speed * lead;
-                      let ty = cannon.target.y + Math.sin(cannon.target.angle) * cannon.target.speed * lead;
-                      let a = Math.atan2(ty - cy, tx - cx);
-                      survivalProjectiles.push({ x: cx, y: cy, vx: Math.cos(a)*6, vy: Math.sin(a)*6, alive: true, target: cannon.target });
+                      let targetX = cannon.target ? cannon.target.x : CX;
+                      let targetY = cannon.target ? cannon.target.y : CY;
+                      let aimAngle = Math.atan2(targetY - cy, targetX - cx);
+                      survivalProjectiles.push({ x: cx, y: cy, vx: Math.cos(aimAngle)*10, vy: Math.sin(aimAngle)*10, alive: true, target: cannon.target });
+                      playCannonSound(cx, cy);
                   }
               });
               
               survivalProjectiles.forEach(p => {
-                  p.x += p.vx; p.y += p.vy;
-                  if (Math.hypot(p.x - CX, p.y - CY) > current_TR_RADIUS * 1.5) p.alive = false;
-                  if (p.alive && p.target) {
-                      for(let i=0; i<p.target.segments.length; i++) {
-                          let s = p.target.segments[i];
-                          if (Math.hypot(p.x - s.x, p.y - s.y) < SEGMENT_SIZE + 6) {
-                              p.alive = false;
-                              p.target.setLength(p.target.length + 4);
-                              addParticles(p.x, p.y, '#0af', 20);
-                              triggerShake();
-                              break;
-                          }
+                  if (p.alive && p.target && p.target.alive) {
+                      let head = p.target.segments[0] || p.target;
+                      let dx = head.x - p.x;
+                      let dy = head.y - p.y;
+                      let dist = Math.hypot(dx, dy);
+                      let speed = 10;
+                      
+                      if (dist <= speed + SEGMENT_SIZE + 6) {
+                          p.alive = false;
+                          p.target.setLength(p.target.length + 4);
+                          addParticles(head.x, head.y, '#0af', 20);
+                          triggerShake();
+                      } else {
+                          let angle = Math.atan2(dy, dx);
+                          p.vx = Math.cos(angle) * speed;
+                          p.vy = Math.sin(angle) * speed;
+                          p.x += p.vx; 
+                          p.y += p.vy;
                       }
+                  } else {
+                      p.x += p.vx; 
+                      p.y += p.vy;
                   }
+                  if (Math.hypot(p.x - CX, p.y - CY) > current_TR_RADIUS * 1.5) p.alive = false;
               });
               survivalProjectiles = survivalProjectiles.filter(p => p.alive);
           }
@@ -1558,11 +1845,11 @@ function trGameLoop(){
           if (now >= scTimerEnd) {
               scState = 'warning'; scTimerEnd = now + 3000;
               let numChambers = Math.random() < 0.5 ? 1 : 2; scChambers = [];
-              let angle1 = Math.random() * Math.PI * 2, cr = 87.5, pathLen = 60, r = current_TR_RADIUS * 0.89 + cr + pathLen; 
-              scChambers.push({x: CX + Math.cos(angle1)*r, y: CY + Math.sin(angle1)*r, r: cr, occupiedBy: null, angle: angle1, pathWidth: 80, dist: r});
+              let angle1 = Math.random() * Math.PI * 2, cr = current_TR_RADIUS * 0.45 * 1.15, pathLen = 60, r = current_TR_RADIUS * 0.89 + cr + pathLen; 
+              scChambers.push({x: CX + Math.cos(angle1)*r, y: CY + Math.sin(angle1)*r, r: cr, occupiedBy: null, angle: angle1, pathWidth: GATE_WIDTH, dist: r});
               if (numChambers === 2) {
                   let angle2 = angle1 + Math.PI + (Math.random() - 0.5) * 1.5;
-                  scChambers.push({x: CX + Math.cos(angle2)*r, y: CY + Math.sin(angle2)*r, r: cr, occupiedBy: null, angle: angle2, pathWidth: 80, dist: r});
+                  scChambers.push({x: CX + Math.cos(angle2)*r, y: CY + Math.sin(angle2)*r, r: cr, occupiedBy: null, angle: angle2, pathWidth: GATE_WIDTH, dist: r});
               }
           }
       } else if (scState === 'warning') {
@@ -1612,7 +1899,7 @@ function trGameLoop(){
       survivalProjectiles.forEach(p => {
           ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI*2);
           ctx.fillStyle = '#0ff'; ctx.shadowColor = '#0af'; ctx.shadowBlur = 15; ctx.fill();
-          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx*3, p.y - p.vy*3);
+          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx*1.5, p.y - p.vy*1.5);
           ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)'; ctx.lineWidth = 4; ctx.stroke();
       });
       ctx.restore();
@@ -1676,7 +1963,8 @@ function trGameLoop(){
       document.getElementById('food-timer-wrap').classList.add('hidden');
   }
   updateTRHud();
-  if(trSnake1.length<=1||trSnake2.length<=1){ endTRGame(); return; }
+  let trMaxLen = (trVariant === 'classic') ? 100 : 120;
+  if(trSnake1.length<=1||trSnake2.length<=1||trSnake1.length>=trMaxLen||trSnake2.length>=trMaxLen){ endTRGame(); return; }
   trAnimFrame=requestAnimationFrame(trGameLoop);
 }
 
@@ -1827,23 +2115,38 @@ function updateTRHud(){
         d.style.background=color; d.style.boxShadow=`0 0 4px ${glow}`; el.appendChild(d); 
     }
   };
-  renderPips('tr-p1-segs',trSnake1?trSnake1.length:TR_INIT_LENGTH, trSnake1?trSnake1.color:'#0ff', trSnake1?trSnake1.glow:'#0af');
+  renderPips('tr-p1-segs',trSnake1?trSnake1.length:TR_INIT_LENGTH, trSnake1?trSnake1.color:'#ff0', trSnake1?trSnake1.glow:'#fa0');
   renderPips('tr-p2-segs',trSnake2?trSnake2.length:TR_INIT_LENGTH, trSnake2?trSnake2.color:'#f0a', trSnake2?trSnake2.glow:'#f04');
 }
 function endTRGame(){
   document.getElementById('btn-pause').classList.add('hidden'); cancelAnimationFrame(trAnimFrame); trAnimFrame=null; trActive=false;
+  document.getElementById('predator-round-label').classList.add('hidden');
   const p1Len=trSnake1.length, p2Len=trSnake2.length;
+  let trMaxLen = (trVariant === 'classic') ? 100 : 120;
   let playerWins;
-  if(p1Len<=1&&p2Len>1) playerWins=true; else if(p2Len<=1&&p1Len>1) playerWins=false; else playerWins=p1Len<=p2Len;
+  let isGameOver = false;
+
+  if(p1Len<=1&&p2Len>1) playerWins=true; 
+  else if(p2Len<=1&&p1Len>1) playerWins=false; 
+  else if(p1Len>=trMaxLen && p2Len<trMaxLen) { playerWins=false; isGameOver=true; }
+  else if(p2Len>=trMaxLen && p1Len<trMaxLen) { playerWins=true; isGameOver=true; }
+  else if(p1Len>=trMaxLen && p2Len>=trMaxLen) { playerWins=false; isGameOver=true; }
+  else playerWins=p1Len<=p2Len;
+
   const elapsed=Math.round((Date.now()-trStartTime)/1000);
   const p1N=trP1Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN', p2N=trP2Type==='small'?'⚡ SPECTER':'💥 LEVIATHAN', bName=trP2Type==='small'?'SPECTER BOT':'LEVIATHAN BOT';
   let winnerLabel;
-  if(trGameMode==='bot') winnerLabel=playerWins?p1N+' WINS!':'🤖 '+bName+' WINS!'; else winnerLabel=playerWins?'P1 '+p1N+' WINS!':'P2 '+p2N+' WINS!';
+  if (isGameOver) {
+      winnerLabel = 'GAME OVER';
+  } else {
+      if(trGameMode==='bot') winnerLabel=playerWins?p1N+' WINS!':'🤖 '+bName+' WINS!'; else winnerLabel=playerWins?'P1 '+p1N+' WINS!':'P2 '+p2N+' WINS!';
+  }
+  
   const p2StatLabel=trGameMode==='bot'?'Bot Final Length':'P2 Final Length';
   showResultScreen(winnerLabel,playerWins, `<div>Your Final Length</div><span>${p1Len}</span><div>${p2StatLabel}</div><span>${p2Len}</span><div>Match Time</div><span>${elapsed}s</span><div>Food Eaten</div><span>${trSnake1.foodEaten}</span>`, 'tailremoval');
 }
 
-const STW_INIT_LENGTH = 40, STW_PLAYER_INIT_LENGTH = 120, STW_TARGET_LENGTH = 1, STW_FOOD_RADIUS = 11, STW_FOOD_SHRINK = -4; 
+const STW_INIT_LENGTH = 50, STW_PLAYER_INIT_LENGTH = 150, STW_TARGET_LENGTH = 1, STW_FOOD_RADIUS = 11, STW_FOOD_SHRINK = -4; 
 const STW_GRAVITY_DURATION = 5000, STW_RIVAL_DURATION = 5000, STW_RIVAL_SHRINK = -4, STW_TELEPORT_COOLDOWN = 2000;
 const STW_BLACKHOLE_DURATION = 5000, STW_HUNTER_DURATION = 5000, STW_HUNTER_PENALTY = 10;
 const stwCam = { x: 0, y: 0 }, STW_CAM_LERP = 0.08;
@@ -1852,6 +2155,7 @@ class STWSnake {
   constructor(x,y,angle,color,glow, initLen = STW_INIT_LENGTH){
     this.x=x; this.y=y; this.angle=angle; this.color=color; this.glow=glow; this.speed=4.3; this.turnSpeed=0.07;
     this.length=initLen; this.segments=[]; this.alive=true; this.foodEaten=0; this.lastTeleportTime=0;
+    this.wallHitCooldown=0;
     for(let i=0;i<initLen;i++) this.segments.push({x:x-Math.cos(angle)*i*SEGMENT_SIZE,y:y-Math.sin(angle)*i*SEGMENT_SIZE});
   }
   turn(dir){ this.angle+=dir*this.turnSpeed; }
@@ -1872,6 +2176,7 @@ class STWSnake {
   }
   update(r){
     if(!this.alive) return;
+    if(this.wallHitCooldown>0) this.wallHitCooldown--;
     let spd = this.speed;
     if (typeof stwHurdleState !== 'undefined' && stwHurdleState === 'slower') { spd = Math.max(0.5, spd - 2); }
     let nx=this.x+Math.cos(this.angle)*spd, ny=this.y+Math.sin(this.angle)*spd;
@@ -1879,6 +2184,7 @@ class STWSnake {
     if(dist>r*0.89 - SEGMENT_SIZE){
       const pushAngle=Math.atan2(CY-ny,CX-nx); this.angle=pushAngle+(Math.random()-.5)*0.4;
       nx=this.x+Math.cos(this.angle)*spd; ny=this.y+Math.sin(this.angle)*spd;
+      if(this.wallHitCooldown <= 0) { playBoundaryHitSound(this.x, this.y); this.wallHitCooldown = 20; }
     }
     this.x=nx; this.y=ny;
     this.segments.unshift({x:this.x,y:this.y});
@@ -2039,7 +2345,7 @@ class Pulito {
 
 let stwActive=false, stwMode='bot', stwSelectedSnake=null, stwPendingMode=null, stwP1Type='small', stwP2Type='big', tempSTWSelectedSnake = null, stwPlayerSnake=null, stwBotSnake=null, stwP2Snake=null;
 let stwFoods=[], stwGravityZones=[], stwBlackHoles=[], stwRivals=[], stwHunters=[], stwPulitos=[], stwAnimFrame=null, stwStartTime=0, stwElapsed=0, stwBestTime = localStorage.getItem('stwBestTime') ? parseInt(localStorage.getItem('stwBestTime')) : Infinity, stwGravityEncounters=0, stwRivalsOutperformed=0;
-let stwInputDir={x:0,y:0}, stwInputDir2={x:0,y:0}, stwBotActionFrame=0, stwBotLastDecision=0, stwBotTargetFood=null, stwHurdleState = 'wait_gravity', stwHurdleTimer = 0, stwBotDiff = 'easy';
+let stwInputDir={x:0,y:0}, stwInputDir2={x:0,y:0}, stwBotActionFrame=0, stwBotLastDecision=0, stwBotTargetFood=null, stwHurdleState = 'wait', stwHurdleTimer = 0, stwBotDiff = 'easy';
 
 function stwSetDiff(d, btn) { stwBotDiff = d; document.querySelectorAll('#stw-diff-section .diff-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
 
@@ -2074,11 +2380,12 @@ function enforceOrbit(snake, bh) {
 }
 
 function startShrinkToWin(mode){
+  document.getElementById('predator-round-label').classList.add('hidden');
   STW_RADIUS = Math.min(W,H)*0.88; stwMode=mode; stwActive=true;
   stwFoods=[]; stwGravityZones=[]; stwBlackHoles=[]; stwRivals=[]; stwHunters=[]; stwPulitos=[]; particles=[]; stwGravityEncounters=0; stwRivalsOutperformed=0; stwBotActionFrame=0; stwBotLastDecision=0; stwBotTargetFood=null;
   initBgParticles();
   document.getElementById('btn-pause').removeProperty ? document.getElementById('btn-pause').classList.remove('hidden') : document.getElementById('btn-pause').className = "btn";
-  const pa=Math.random()*Math.PI*2, pCfg = stwP1Type === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'}, bCfg = stwP2Type === 'small' ? {c:'#0ff',g:'#0af'} : {c:'#f0a',g:'#f04'};
+  const pa=Math.random()*Math.PI*2, pCfg = stwP1Type === 'small' ? {c:'#ff0',g:'#fa0'} : {c:'#f0a',g:'#f04'}, bCfg = stwP2Type === 'small' ? {c:'#ff0',g:'#fa0'} : {c:'#f0a',g:'#f04'};
   stwPlayerSnake=new STWSnake(CX+Math.cos(pa)*STW_RADIUS*0.4, CY+Math.sin(pa)*STW_RADIUS*0.4, pa+Math.PI, pCfg.c, pCfg.g, STW_PLAYER_INIT_LENGTH);
   document.getElementById('stw-box-right').classList.toggle('hidden', stwMode === 'self');
   const rivalLenEl = document.getElementById('stw-rival-len'), rivalCountEl = document.getElementById('stw-rival-count');
@@ -2094,7 +2401,7 @@ function startShrinkToWin(mode){
   }
   stwCam.x = stwPlayerSnake.x; stwCam.y = stwPlayerSnake.y;
   for(let i=0;i<8;i++) stwFoods.push(new STWFood());
-  stwStartTime=Date.now(); stwElapsed=0; stwHurdleState = 'wait_gravity'; stwHurdleTimer = Date.now() + 10000;
+  stwStartTime=Date.now(); stwElapsed=0; stwHurdleState = 'wait'; stwHurdleTimer = Date.now() + 10000;
   document.getElementById('stw-player-len').textContent = stwPlayerSnake.length;
   document.getElementById('stw-target-label').textContent = stwMode==='local' ? 'P1 TARGET: ' + STW_TARGET_LENGTH : 'TARGET: ' + STW_TARGET_LENGTH;
   document.getElementById('stw-rival-label').textContent = stwMode==='bot' ? '🤖 BOT' : (stwMode==='local' ? '🐍 P2 LENGTH' : '🌀 RIVALS');
@@ -2162,55 +2469,48 @@ function stwGameLoop(){
   ctx.save(); ctx.translate(shakeX, shakeY); ctx.clearRect(-shakeX-10,-shakeY-10,W+20,H+20); ctx.save(); ctx.translate(camOffX, camOffY); drawArena();
   
   if(now >= stwHurdleTimer){
-    if(stwHurdleState === 'wait_gravity'){
-      stwGravityZones = [];
-      if(stwMode === 'bot') { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); if(stwBotSnake && stwBotSnake.alive) stwGravityZones.push(new GravityZone(stwBotSnake)); }
-      else if (stwMode === 'local') { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); if(stwP2Snake && stwP2Snake.alive) stwGravityZones.push(new GravityZone(stwP2Snake)); }
-      else { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); }
-      stwHurdleState = 'gravity'; stwHurdleTimer = now + 5000;
-    } else if(stwHurdleState === 'gravity'){
-      stwHurdleState = 'wait_blackhole'; stwHurdleTimer = now + 10000;
-    } else if(stwHurdleState === 'wait_blackhole'){
-      stwBlackHoles = [];
-      if(stwPlayerSnake && stwPlayerSnake.alive) stwBlackHoles.push(new BlackHole(stwPlayerSnake));
-      if(stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwBlackHoles.push(new BlackHole(stwBotSnake));
-      if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwBlackHoles.push(new BlackHole(stwP2Snake));
-      stwHurdleState = 'blackhole'; stwHurdleTimer = now + 5000;
-      const el = document.getElementById('stw-event-label'); el.textContent = '🕳️ BLACK HOLE!'; el.style.color = '#a0f'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
-    } else if(stwHurdleState === 'blackhole'){
-      stwHurdleState = 'wait_rival'; stwHurdleTimer = now + 10000;
-    } else if(stwHurdleState === 'wait_rival'){
-      for(let i=0;i<3;i++) stwRivals.push(new RivalSnake());
-      stwHurdleState = 'rival'; stwHurdleTimer = now + 5000;
-    } else if(stwHurdleState === 'rival'){
-      stwHurdleState = 'wait_hunter'; stwHurdleTimer = now + 10000;
-    } else if(stwHurdleState === 'wait_hunter'){
-      stwHunters = [];
-      if (stwPlayerSnake && stwPlayerSnake.alive) stwHunters.push(new MongooseHunter(stwPlayerSnake));
-      if (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwHunters.push(new MongooseHunter(stwBotSnake));
-      if (stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwHunters.push(new MongooseHunter(stwP2Snake));
-      stwHurdleState = 'hunter'; stwHurdleTimer = now + STW_HUNTER_DURATION;
-      const el = document.getElementById('stw-event-label'); el.textContent = '👹 ENEMY HUNTERS!'; el.style.color = '#f04'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
-    } else if(stwHurdleState === 'hunter'){
-      stwHurdleState = 'wait_slower'; stwHurdleTimer = now + 10000;
-    } else if(stwHurdleState === 'wait_slower'){
-      stwHurdleState = 'slower'; stwHurdleTimer = now + 5000;
-      const el = document.getElementById('stw-event-label'); el.textContent = '🐌 SLOW MOTION!'; el.style.color = '#fa0'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 5000);
-    } else if(stwHurdleState === 'slower'){
-      stwHurdleState = 'wait_pulito'; stwHurdleTimer = now + 10000;
-    } else if(stwHurdleState === 'wait_pulito'){
-      stwPulitos = []; stwPulitos.push(new Pulito());
-      let p2Exists = (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) || (stwMode === 'local' && stwP2Snake && stwP2Snake.alive);
-      if (p2Exists) stwPulitos.push(new Pulito());
-      stwHurdleState = 'pulito'; stwHurdleTimer = now + 10000;
-      const el = document.getElementById('stw-event-label'); el.textContent = '🌪️ BLACK ANOMALY!'; el.style.color = '#888'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
-    } else if(stwHurdleState === 'pulito'){
-      stwHurdleState = 'wait_slipo'; stwHurdleTimer = now + 10000;
-    } else if(stwHurdleState === 'wait_slipo'){
-      stwHurdleState = 'slipo'; stwHurdleTimer = now + 10000;
-      const el = document.getElementById('stw-event-label'); el.textContent = '✨ SLIPO ACTIVE!'; el.style.color = '#e4e8f0'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
-    } else if(stwHurdleState === 'slipo'){
-      stwHurdleState = 'wait_gravity'; stwHurdleTimer = now + 10000;
+    if(stwHurdleState.startsWith('wait')){
+      const events = ['gravity', 'blackhole', 'rival', 'hunter', 'slower', 'pulito', 'slipo'];
+      stwHurdleState = events[Math.floor(Math.random() * events.length)];
+      
+      if (stwHurdleState === 'gravity') {
+        stwGravityZones = [];
+        if(stwMode === 'bot') { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); if(stwBotSnake && stwBotSnake.alive) stwGravityZones.push(new GravityZone(stwBotSnake)); }
+        else if (stwMode === 'local') { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); if(stwP2Snake && stwP2Snake.alive) stwGravityZones.push(new GravityZone(stwP2Snake)); }
+        else { if(stwPlayerSnake && stwPlayerSnake.alive) stwGravityZones.push(new GravityZone(stwPlayerSnake)); }
+        stwHurdleTimer = now + 5000;
+      } else if(stwHurdleState === 'blackhole'){
+        stwBlackHoles = [];
+        if(stwPlayerSnake && stwPlayerSnake.alive) stwBlackHoles.push(new BlackHole(stwPlayerSnake));
+        if(stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwBlackHoles.push(new BlackHole(stwBotSnake));
+        if(stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwBlackHoles.push(new BlackHole(stwP2Snake));
+        stwHurdleTimer = now + 5000;
+        const el = document.getElementById('stw-event-label'); el.textContent = '🕳️ BLACK HOLE!'; el.style.color = '#a0f'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
+      } else if(stwHurdleState === 'rival'){
+        for(let i=0;i<3;i++) stwRivals.push(new RivalSnake());
+        stwHurdleTimer = now + 5000;
+      } else if(stwHurdleState === 'hunter'){
+        stwHunters = [];
+        if (stwPlayerSnake && stwPlayerSnake.alive) stwHunters.push(new MongooseHunter(stwPlayerSnake));
+        if (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) stwHunters.push(new MongooseHunter(stwBotSnake));
+        if (stwMode === 'local' && stwP2Snake && stwP2Snake.alive) stwHunters.push(new MongooseHunter(stwP2Snake));
+        stwHurdleTimer = now + STW_HUNTER_DURATION;
+        const el = document.getElementById('stw-event-label'); el.textContent = '👹 ENEMY HUNTERS!'; el.style.color = '#f04'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
+      } else if(stwHurdleState === 'slower'){
+        stwHurdleTimer = now + 5000;
+        const el = document.getElementById('stw-event-label'); el.textContent = '🐌 SLOW MOTION!'; el.style.color = '#fa0'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 5000);
+      } else if(stwHurdleState === 'pulito'){
+        stwPulitos = []; stwPulitos.push(new Pulito());
+        let p2Exists = (stwMode === 'bot' && stwBotSnake && stwBotSnake.alive) || (stwMode === 'local' && stwP2Snake && stwP2Snake.alive);
+        if (p2Exists) stwPulitos.push(new Pulito());
+        stwHurdleTimer = now + 10000;
+        const el = document.getElementById('stw-event-label'); el.textContent = '🌪️ BLACK ANOMALY!'; el.style.color = '#888'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
+      } else if(stwHurdleState === 'slipo'){
+        stwHurdleTimer = now + 10000;
+        const el = document.getElementById('stw-event-label'); el.textContent = '✨ SLIPO ACTIVE!'; el.style.color = '#e4e8f0'; el.classList.remove('hidden'); setTimeout(()=> { el.classList.add('hidden'); }, 2000);
+      }
+    } else {
+      stwHurdleState = 'wait'; stwHurdleTimer = now + 10000;
     }
   }
 
